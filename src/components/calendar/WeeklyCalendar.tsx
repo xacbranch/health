@@ -1,0 +1,412 @@
+"use client";
+
+import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
+import type { CalendarDayEvent } from "@/types";
+import { format } from "date-fns";
+
+/* ─── Config ─── */
+const WAKE_HOUR = 7;
+const SLEEP_HOUR = 22.5; // 10:30pm
+const TOTAL_MINUTES = (SLEEP_HOUR - WAKE_HOUR) * 60; // 930 min
+const HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+
+const CATEGORY_COLORS: Record<string, string> = {
+  work: "#FF6A00",
+  training: "#00D0FF",
+  supplement: "#39FF14",
+  meal: "#FFB800",
+  routine: "#555555",
+  sleep: "#6B21A8",
+  health_check: "#00D0FF",
+};
+
+interface DayData {
+  date: Date;
+  dateStr: string;
+  events: CalendarDayEvent[];
+}
+
+export default function WeeklyCalendar({ days }: { days: DayData[] }) {
+  const [now, setNow] = useState(new Date());
+  const [tooltip, setTooltip] = useState<{
+    event: CalendarDayEvent;
+    x: number;
+    y: number;
+  } | null>(null);
+  const calRef = useRef<HTMLDivElement>(null);
+  const todayStr = days[0]?.dateStr;
+
+  useEffect(() => {
+    const iv = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowPct = ((nowMinutes - WAKE_HOUR * 60) / TOTAL_MINUTES) * 100;
+  const showNowLine = nowPct >= 0 && nowPct <= 100;
+
+  function handleHover(
+    ev: CalendarDayEvent,
+    e: React.MouseEvent,
+  ) {
+    const rect = calRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setTooltip({
+      event: ev,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+  }
+
+  return (
+    <div className="hud-panel p-2 md:p-3 corner-brackets" ref={calRef}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="eva-label text-[8px]">▎ WEEKLY OPERATIONS</div>
+        <div className="text-[7px] tracking-wider text-text-dim">
+          {days.length > 0 && (
+            <>
+              {format(days[0].date, "MMM d").toUpperCase()}
+              {" — "}
+              {format(days[days.length - 1].date, "MMM d").toUpperCase()}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="relative overflow-x-auto">
+        {/* Hour header */}
+        <div className="flex" style={{ minWidth: 900 }}>
+          <div className="shrink-0 w-14" />
+          <div className="flex-1 relative h-4">
+            {HOURS.map((h) => {
+              const pct =
+                ((h - WAKE_HOUR) / (SLEEP_HOUR - WAKE_HOUR)) * 100;
+              return (
+                <div
+                  key={h}
+                  className="absolute text-[7px] tabular-nums text-text-dim"
+                  style={{
+                    left: `${pct}%`,
+                    transform: "translateX(-50%)",
+                  }}
+                >
+                  {h > 12 ? h - 12 : h}
+                  {h >= 12 ? "p" : "a"}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Day rows */}
+        <div style={{ minWidth: 900 }}>
+          {days.map((day) => {
+            const isToday = day.dateStr === todayStr;
+            const dayName = format(day.date, "EEE").toUpperCase();
+            const dayNum = format(day.date, "d");
+            const dow = day.date.getDay();
+            const isWeekend = dow === 0 || dow === 6;
+
+            const blocks = day.events.filter(
+              (ev) => ev.event_type === "block",
+            );
+            const points = day.events.filter(
+              (ev) => ev.event_type === "point",
+            );
+
+            return (
+              <div
+                key={day.dateStr}
+                className={`flex border-t ${
+                  isToday ? "border-eva/30" : "border-border/40"
+                }`}
+              >
+                {/* Day label */}
+                <div
+                  className={`shrink-0 w-14 py-1.5 pr-2 text-right ${
+                    isToday ? "bg-eva/[0.04]" : ""
+                  }`}
+                >
+                  <div
+                    className={`text-[7px] font-bold tracking-[0.15em] ${
+                      isToday
+                        ? "text-eva"
+                        : isWeekend
+                          ? "text-text-dim/50"
+                          : "text-text-dim"
+                    }`}
+                  >
+                    {dayName}
+                  </div>
+                  <div
+                    className={`text-[11px] font-black tabular-nums leading-tight ${
+                      isToday ? "eva-text" : "text-text"
+                    }`}
+                  >
+                    {dayNum}
+                  </div>
+                </div>
+
+                {/* Time track */}
+                <div
+                  className={`flex-1 relative ${
+                    isToday ? "bg-eva/[0.02]" : ""
+                  }`}
+                  style={{ height: 44 }}
+                >
+                  {/* Hour gridlines */}
+                  {HOURS.map((h) => {
+                    const pct =
+                      ((h - WAKE_HOUR) / (SLEEP_HOUR - WAKE_HOUR)) * 100;
+                    return (
+                      <div
+                        key={h}
+                        className="absolute top-0 bottom-0 border-l border-border/20"
+                        style={{ left: `${pct}%` }}
+                      />
+                    );
+                  })}
+
+                  {/* Now line */}
+                  {isToday && showNowLine && (
+                    <div
+                      className="absolute top-0 bottom-0 z-30 pointer-events-none"
+                      style={{ left: `${nowPct}%` }}
+                    >
+                      <div
+                        className="w-px h-full bg-danger"
+                        style={{
+                          boxShadow: "0 0 6px #FF1A1A80",
+                        }}
+                      />
+                      <div
+                        className="absolute -top-[3px] -left-[3px] w-[7px] h-[7px] rounded-full bg-danger"
+                        style={{ boxShadow: "0 0 8px #FF1A1A" }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Block events — top lane (26px) */}
+                  {blocks.map((ev) => (
+                    <BlockBar
+                      key={ev.id}
+                      event={ev}
+                      onHover={(e) => handleHover(ev, e)}
+                      onLeave={() => setTooltip(null)}
+                    />
+                  ))}
+
+                  {/* Point events — bottom lane, spaced apart */}
+                  {points.map((ev, idx) => (
+                    <PointMarker
+                      key={ev.id}
+                      event={ev}
+                      index={idx}
+                      onHover={(e) => handleHover(ev, e)}
+                      onLeave={() => setTooltip(null)}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Tooltip */}
+      {tooltip && <Tooltip info={tooltip} />}
+    </div>
+  );
+}
+
+/* ─── Block Event Bar ─── */
+function BlockBar({
+  event,
+  onHover,
+  onLeave,
+}: {
+  event: CalendarDayEvent;
+  onHover: (e: React.MouseEvent) => void;
+  onLeave: () => void;
+}) {
+  const router = useRouter();
+  const startMin = timeToMinutes(event.start_time);
+  const endMin = event.end_time
+    ? timeToMinutes(event.end_time)
+    : startMin + 30;
+  const wakeMin = WAKE_HOUR * 60;
+  const sleepMin = SLEEP_HOUR * 60;
+
+  const clampedStart = Math.max(startMin, wakeMin);
+  const clampedEnd = Math.min(endMin, sleepMin);
+  if (clampedEnd <= clampedStart) return null;
+
+  const leftPct = ((clampedStart - wakeMin) / TOTAL_MINUTES) * 100;
+  const widthPct = ((clampedEnd - clampedStart) / TOTAL_MINUTES) * 100;
+  const color =
+    event.color || CATEGORY_COLORS[event.category] || "#444";
+
+  return (
+    <div
+      className="absolute z-10 cursor-pointer group"
+      style={{
+        left: `${leftPct}%`,
+        width: `${Math.max(widthPct, 0.5)}%`,
+        top: 2,
+        height: 24,
+      }}
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onClick={() =>
+        router.push(`/schedule/${event.id}`)
+      }
+    >
+      <div
+        className="h-full rounded-sm overflow-hidden transition-all group-hover:brightness-125"
+        style={{
+          background: `${color}18`,
+          borderLeft: `2px solid ${color}`,
+          borderTop: `1px solid ${color}15`,
+          borderBottom: `1px solid ${color}15`,
+        }}
+      >
+        <div className="px-1 py-0.5 truncate">
+          <span
+            className="text-[7px] font-bold tracking-[0.08em]"
+            style={{ color: `${color}CC` }}
+          >
+            {event.title}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Point Event Marker ─── */
+function PointMarker({
+  event,
+  index,
+  onHover,
+  onLeave,
+}: {
+  event: CalendarDayEvent;
+  index: number;
+  onHover: (e: React.MouseEvent) => void;
+  onLeave: () => void;
+}) {
+  const router = useRouter();
+  const startMin = timeToMinutes(event.start_time);
+  const wakeMin = WAKE_HOUR * 60;
+  const leftPct = ((startMin - wakeMin) / TOTAL_MINUTES) * 100;
+  if (leftPct < 0 || leftPct > 100) return null;
+
+  const color =
+    event.color || CATEGORY_COLORS[event.category] || "#39FF14";
+
+  // Offset each point horizontally by index to prevent stacking
+  const offsetPx = index * 10;
+
+  return (
+    <div
+      className="absolute z-20 cursor-pointer group"
+      style={{
+        left: `calc(${leftPct}% + ${offsetPx}px)`,
+        bottom: 4,
+        width: 8,
+        height: 8,
+      }}
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onClick={() => router.push(`/schedule/${event.id}`)}
+    >
+      <div
+        className="w-[7px] h-[7px] transition-transform group-hover:scale-[1.8]"
+        style={{
+          background: color,
+          boxShadow: `0 0 5px ${color}80`,
+          clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
+        }}
+      />
+    </div>
+  );
+}
+
+/* ─── Tooltip ─── */
+function Tooltip({
+  info,
+}: {
+  info: { event: CalendarDayEvent; x: number; y: number };
+}) {
+  const { event, x, y } = info;
+  const color =
+    event.color || CATEGORY_COLORS[event.category] || "#444";
+  const timeRange =
+    event.event_type === "block" && event.end_time
+      ? `${formatTime(event.start_time)} — ${formatTime(event.end_time)}`
+      : formatTime(event.start_time);
+
+  return (
+    <div
+      className="absolute z-50 pointer-events-none"
+      style={{
+        left: Math.min(x, 700),
+        top: y - 70,
+      }}
+    >
+      <div
+        className="p-2 min-w-[140px]"
+        style={{
+          background: "#0A0A0A",
+          border: `1px solid ${color}40`,
+          boxShadow: `0 0 20px ${color}15, 0 4px 12px rgba(0,0,0,0.8)`,
+        }}
+      >
+        <div
+          className="text-[9px] font-black tracking-wider mb-0.5"
+          style={{ color }}
+        >
+          {event.title}
+        </div>
+        <div className="text-[8px] text-text-dim mb-1">{timeRange}</div>
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[7px] font-bold tracking-wider uppercase px-1 py-0.5"
+            style={{
+              color: `${color}CC`,
+              background: `${color}15`,
+              border: `1px solid ${color}30`,
+            }}
+          >
+            {event.category}
+          </span>
+          <span className="text-[7px] text-text-dim">
+            {event.event_type === "block" ? "BLOCK" : "POINT"}
+          </span>
+        </div>
+        {event.notes && (
+          <div className="text-[7px] text-text-dim mt-1 italic">
+            {event.notes}
+          </div>
+        )}
+        <div className="text-[6px] text-text-dim/50 mt-1.5">
+          CLICK FOR DETAILS →
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Util ─── */
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function formatTime(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
