@@ -12,6 +12,7 @@ const items = [
   { href: "/bloodwork", label: "BLOODWORK", code: "05", icon: "◎" },
   { href: "/goals", label: "OBJECTIVES", code: "06", icon: "△" },
   { href: "/trends", label: "TRENDS", code: "07", icon: "▽" },
+  { href: "/sleep", label: "SLEEP", code: "08", icon: "◆" },
 ];
 
 export function Nav() {
