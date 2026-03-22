@@ -21,8 +21,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   meal: "#FFB800", routine: "#555555", sleep: "#6B21A8", health_check: "#00D0FF",
 };
 
-const STATUS_COLORS: Record<string, string | null> = {
-  done: "#39FF14", skipped: "#FFB800", missed: "#FF1A1A", pending: null, future: "#444444",
+const STATUS_COLORS: Record<string, string> = {
+  done: "#39FF14", skipped: "#FFB800", missed: "#FF1A1A", pending: "#888888", future: "#444444",
 };
 
 const EVENT_TO_KEY: Record<string, string> = {
@@ -153,12 +153,8 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
       return "pending";
     }
 
-    // Non-tracked events: past = default color, today = pending, future = grey
-    if (isPastDay) return "done"; // assume completed if past and no tracking
-    if (isToday) {
-      const [h, m] = ev.start_time.split(":").map(Number);
-      if (h * 60 + m < nowMinutes) return "pending"; // past time today, no tracking
-    }
+    // Non-tracked events (work, meals, sleep, etc.) — use pending for all
+    // They don't have checklist tracking so we can't know if they happened
     return "pending";
   }
 
@@ -387,7 +383,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
                     const leftPct = ((clampedStart - wakeMin) / TOTAL_MINUTES) * 100;
                     const widthPct = ((clampedEnd - clampedStart) / TOTAL_MINUTES) * 100;
                     const defaultColor = ev.color || CATEGORY_COLORS[ev.category] || "#444";
-                    const color = status ? (STATUS_COLORS[status] || defaultColor) : defaultColor;
+                    const color = STATUS_COLORS[status] || defaultColor;
                     const trackEl = trackRefs.current[dayStr];
 
                     return (
@@ -445,7 +441,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
                     const leftPct = ((startMin - wakeMin) / TOTAL_MINUTES) * 100;
                     if (leftPct < 0 || leftPct > 100) return null;
                     const defaultColor = ev.color || CATEGORY_COLORS[ev.category] || "#39FF14";
-                    const color = status ? (STATUS_COLORS[status] || defaultColor) : defaultColor;
+                    const color = STATUS_COLORS[status] || defaultColor;
 
                     return (
                       <div key={`${ev.id}-${dayStr}`} data-event className="absolute z-20 cursor-pointer group"
@@ -519,6 +515,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
         <LegendDot color="#39FF14" label="DONE" />
         <LegendDot color="#FFB800" label="SKIPPED" />
         <LegendDot color="#FF1A1A" label="MISSED" />
+        <LegendDot color="#888888" label="PENDING" />
         <LegendDot color="#444444" label="UPCOMING" />
         <span className="text-[7px] tracking-wider text-text-dim/40 ml-auto">DRAG TO MOVE -- EDGES TO RESIZE -- CLICK EMPTY TO ADD</span>
       </div>

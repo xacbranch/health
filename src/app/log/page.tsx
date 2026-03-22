@@ -170,8 +170,11 @@ export default function LogPage() {
       let status: LogEntry["status"] = "pending";
       if (checkRow) {
         status = checkRow.completed ? "done" : "skipped";
-      } else if (isPast) {
-        status = isToday ? "pending" : "missed";
+      } else if (ev.id === "se-weighin" && weighIns.some((w) => w.date === selectedDate)) {
+        // Weigh-in has data but no checklist entry — mark done
+        status = "done";
+      } else if (!isToday && selectedDate < localDate(now)) {
+        status = "missed";
       }
 
       log.push({
@@ -225,17 +228,15 @@ export default function LogPage() {
       });
     }
 
-    // 4. Weigh-in
+    // 4. Weigh-in detail — merge into schedule entry instead of adding duplicate
     const dayWeighIn = weighIns.find((w) => w.date === selectedDate);
     if (dayWeighIn) {
-      log.push({
-        time: to12h("08:15"),
-        sortKey: "08:15",
-        label: "WEIGH-IN",
-        category: "health_check",
-        status: "done",
-        detail: `${dayWeighIn.weight} lbs${dayWeighIn.body_fat_pct ? ` | ${dayWeighIn.body_fat_pct}% BF` : ""}`,
-      });
+      // Find the schedule-based weigh-in entry and add the data
+      const weighInEntry = log.find((e) => e.label === "WEIGH-IN" && e.category === "health_check");
+      if (weighInEntry) {
+        weighInEntry.status = "done";
+        weighInEntry.detail = `${dayWeighIn.weight} lbs${dayWeighIn.body_fat_pct ? ` | ${dayWeighIn.body_fat_pct}% BF` : ""}`;
+      }
     }
 
     // 5. Daily steps summary
@@ -334,7 +335,13 @@ export default function LogPage() {
           </button>
           <div className="text-center">
             <div className="text-[8px] tracking-[0.2em] text-text-dim">{dayLabel}</div>
-            <div className="text-sm font-black eva-text tabular-nums">{selectedDate}</div>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="text-sm font-black eva-text tabular-nums bg-transparent border-none text-center cursor-pointer focus:outline-none"
+              style={{ colorScheme: "dark" }}
+            />
           </div>
           <button onClick={() => goDay(1)} className="px-2 py-1 text-[9px] font-bold text-text-dim hover:text-eva transition-colors">
             NEXT
