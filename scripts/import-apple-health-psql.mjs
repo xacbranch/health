@@ -42,7 +42,16 @@ function toISO(str) {
 }
 function dateOnly(str) {
   if (!str) return null;
-  return str.slice(0, 10);
+  // Convert to Pacific time to get the correct local date
+  // Apple Health exports in device local time, but be explicit
+  const iso = toISO(str);
+  if (!iso) return str.slice(0, 10);
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }); // YYYY-MM-DD
+  } catch {
+    return str.slice(0, 10);
+  }
 }
 
 /* ─── Accumulators ─── */

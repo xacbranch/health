@@ -41,6 +41,7 @@ Keys:
 | gym | GYM | 17:00 | Mon/Wed/Fri |
 | tennis | TENNIS | 17:00 | Tue/Thu |
 | dogwalk_pm | DOG WALK PM | 20:00 | Glucose mgmt |
+| magnesium | MAGNESIUM GLYCINATE | 21:30 | 400mg, every night at wind down |
 
 Completed = true means done. Completed = false means skipped (chose not to do it).
 If it's not in the table at all for today, it was missed (never addressed).

@@ -38,7 +38,8 @@ const seedScheduleEvents: ScheduleEvent[] = [
   { id: "se-weighin", title: "WEIGH-IN", event_type: "point", category: "health_check", start_time: "08:15", end_time: null, day_of_week: ALL_DAYS, specific_date: null, color: "#00D0FF", icon: "⚖", is_template: true, completed: false, notes: null, sort_order: 0 },
   { id: "se-d3k2", title: "D3+K2", event_type: "point", category: "supplement", start_time: "08:20", end_time: null, day_of_week: ALL_DAYS, specific_date: null, color: "#39FF14", icon: "💊", is_template: true, completed: false, notes: "With first meal", sort_order: 1 },
   { id: "se-hydrate-pm", title: "HYDRATION CHECK", event_type: "point", category: "health_check", start_time: "15:00", end_time: null, day_of_week: WEEKDAYS, specific_date: null, color: "#00D0FF", icon: "💧", is_template: true, completed: false, notes: null, sort_order: 0 },
-  { id: "se-preworkout", title: "PRE-WORKOUT", event_type: "point", category: "supplement", start_time: "16:45", end_time: null, day_of_week: WEEKDAYS, specific_date: null, color: "#39FF14", icon: "⚡", is_template: true, completed: false, notes: "Hydration + session preview", sort_order: 0 },
+  { id: "se-preworkout", title: "PRE-WORKOUT", event_type: "point", category: "supplement", start_time: "16:45", end_time: null, day_of_week: WEEKDAYS, specific_date: null, color: "#39FF14", icon: null, is_template: true, completed: false, notes: "Hydration + session preview", sort_order: 0 },
+  { id: "se-magnesium", title: "MAGNESIUM GLYCINATE", event_type: "point", category: "supplement", start_time: "21:30", end_time: null, day_of_week: ALL_DAYS, specific_date: null, color: "#39FF14", icon: null, is_template: true, completed: false, notes: "400mg, wind down", sort_order: 0 },
 ];
 
 /* ═══════════════════════════════════════════════
@@ -146,6 +147,7 @@ const defaultChecklist: ChecklistItem[] = [
   { key: "dogwalk", label: "DOG WALK", completed: false },
   { key: "semax", label: "SEMAX + SELANK", completed: false },
   { key: "d3k2", label: "D3+K2 W/ MEAL", completed: false },
+  { key: "magnesium", label: "MAGNESIUM GLYCINATE", completed: false },
 ];
 
 /* ═══════════════════════════════════════════════

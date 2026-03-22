@@ -71,6 +71,7 @@ const EVENT_TO_KEY: Record<string, string> = {
   "se-gym": "gym",
   "se-tennis": "tennis",
   "se-dogwalk-pm": "dogwalk_pm",
+  "se-magnesium": "magnesium",
 };
 
 /* ─── Local date helper ─── */

@@ -30,6 +30,7 @@ const EVENT_TO_KEY: Record<string, string> = {
   "se-dogwalk-am": "dogwalk_am", "se-weighin": "weighin", "se-d3k2": "d3k2",
   "se-hydrate-pm": "hydrate_pm", "se-preworkout": "preworkout",
   "se-gym": "gym", "se-tennis": "tennis", "se-dogwalk-pm": "dogwalk_pm",
+  "se-magnesium": "magnesium",
 };
 
 const CATEGORIES: EventCategory[] = ["work", "training", "supplement", "meal", "routine", "health_check"];
