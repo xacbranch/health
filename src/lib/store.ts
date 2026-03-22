@@ -229,7 +229,7 @@ export const useStore = create<Store>((set, get) => ({
     const id = uid("bm");
     const row = { ...m, id };
     set((s) => ({ bodyMeasurements: [...s.bodyMeasurements, row] }));
-    dbInsert("body_measurements", { ...m, source: "manual" });
+    dbInsert("body_measurements", { ...m, source: "user" });
   },
   updateBodyMeasurement: (id, m) => {
     set((s) => ({ bodyMeasurements: s.bodyMeasurements.map((x) => (x.id === id ? { ...x, ...m } : x)) }));
@@ -244,7 +244,7 @@ export const useStore = create<Store>((set, get) => ({
   addWeighIn: (w) => {
     const id = uid("w");
     set((s) => ({ weighIns: [...s.weighIns, { ...w, id }] }));
-    dbInsert("weigh_ins", { ...w, source: "manual" });
+    dbInsert("weigh_ins", { ...w, source: "user" });
   },
   updateWeighIn: (id, w) => {
     set((s) => ({ weighIns: s.weighIns.map((x) => (x.id === id ? { ...x, ...w } : x)) }));
@@ -357,7 +357,7 @@ export const useStore = create<Store>((set, get) => ({
   /* ── Health Metrics ── */
   addHealthMetric: (m) => {
     set((s) => ({ healthMetrics: [...s.healthMetrics, m] }));
-    dbInsert("health_metrics", { ...m, source: "manual" });
+    dbInsert("health_metrics", { ...m, source: "user" });
   },
   updateHealthMetric: (date, m) => {
     set((s) => ({ healthMetrics: s.healthMetrics.map((x) => x.date === date ? { ...x, ...m } : x) }));
