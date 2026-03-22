@@ -23,7 +23,7 @@ User ID (use in every INSERT): `efd6fb17-951e-4d8c-a768-ec826ca3ae50`
 
 ```sql
 INSERT INTO daily_checklist (user_id, date, key, label, completed, completed_at)
-VALUES ('efd6fb17-951e-4d8c-a768-ec826ca3ae50', CURRENT_DATE, 'KEY', 'LABEL', true, now())
+VALUES ('efd6fb17-951e-4d8c-a768-ec826ca3ae50', (now() AT TIME ZONE 'America/Los_Angeles')::date, 'KEY', 'LABEL', true, now())
 ON CONFLICT (user_id, date, key) DO UPDATE SET completed = EXCLUDED.completed, completed_at = EXCLUDED.completed_at;
 ```
 
@@ -49,7 +49,7 @@ If it's not in the table at all for today, it was missed (never addressed).
 
 ```sql
 INSERT INTO weigh_ins (user_id, date, weight, body_fat_pct)
-VALUES ('efd6fb17-951e-4d8c-a768-ec826ca3ae50', CURRENT_DATE, 198.5, NULL)
+VALUES ('efd6fb17-951e-4d8c-a768-ec826ca3ae50', (now() AT TIME ZONE 'America/Los_Angeles')::date, 198.5, NULL)
 ON CONFLICT (user_id, date) DO UPDATE SET weight = EXCLUDED.weight;
 ```
 
@@ -59,7 +59,7 @@ Also mark weighin checklist done when logging weight.
 
 ```sql
 INSERT INTO meals (user_id, date, description, calories, protein_g, carbs_g, fat_g, notes)
-VALUES ('efd6fb17-951e-4d8c-a768-ec826ca3ae50', CURRENT_DATE, 'Chicken breast + rice', 550, 45, 60, 12, NULL);
+VALUES ('efd6fb17-951e-4d8c-a768-ec826ca3ae50', (now() AT TIME ZONE 'America/Los_Angeles')::date, 'Chicken breast + rice', 550, 45, 60, 12, NULL);
 ```
 
 Estimate macros from descriptions. Be reasonable, not precise.
@@ -68,7 +68,7 @@ Estimate macros from descriptions. Be reasonable, not precise.
 
 ```sql
 INSERT INTO body_measurements (user_id, date, site, value, unit)
-VALUES ('efd6fb17-951e-4d8c-a768-ec826ca3ae50', CURRENT_DATE, 'waist', 35.0, 'in');
+VALUES ('efd6fb17-951e-4d8c-a768-ec826ca3ae50', (now() AT TIME ZONE 'America/Los_Angeles')::date, 'waist', 35.0, 'in');
 ```
 
 Sites: waist, chest, hips, neck, left_arm, right_arm, left_thigh, right_thigh, left_calf, right_calf, shoulders, forearm
@@ -78,19 +78,19 @@ Sites: waist, chest, hips, neck, left_arm, right_arm, left_thigh, right_thigh, l
 ### Today's checklist
 ```sql
 SELECT key, label, completed, completed_at FROM daily_checklist
-WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50' AND date = CURRENT_DATE ORDER BY completed_at;
+WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50' AND date = (now() AT TIME ZONE 'America/Los_Angeles')::date ORDER BY completed_at;
 ```
 
 ### Today's vitals (from Apple Watch auto-import)
 ```sql
 SELECT resting_hr, hrv, sleep_hours, steps, active_energy, vo2_max, blood_oxygen, exercise_minutes, distance_mi
-FROM health_metrics WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50' AND date = CURRENT_DATE;
+FROM health_metrics WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50' AND date = (now() AT TIME ZONE 'America/Los_Angeles')::date;
 ```
 
 ### Today's meals
 ```sql
 SELECT description, calories, protein_g, carbs_g, fat_g FROM meals
-WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50' AND date = CURRENT_DATE;
+WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50' AND date = (now() AT TIME ZONE 'America/Los_Angeles')::date;
 ```
 
 ### Latest weight
@@ -102,21 +102,21 @@ WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50' ORDER BY date DESC LIMIT 
 ### Weight trend (7 days)
 ```sql
 SELECT date, weight FROM weigh_ins
-WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50' AND date >= CURRENT_DATE - 7 ORDER BY date;
+WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50' AND date >= (now() AT TIME ZONE 'America/Los_Angeles')::date - 7 ORDER BY date;
 ```
 
 ### This week's workouts (Apple Watch)
 ```sql
 SELECT activity_type, start_date::date, duration_minutes, avg_hr, total_energy
 FROM apple_workouts WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50'
-AND start_date >= CURRENT_DATE - 7 ORDER BY start_date DESC;
+AND start_date >= (now() AT TIME ZONE 'America/Los_Angeles')::date - 7 ORDER BY start_date DESC;
 ```
 
 ### Last night's sleep
 ```sql
 SELECT stage, EXTRACT(EPOCH FROM (end_date - start_date))/3600 as hours
 FROM sleep_sessions WHERE user_id = 'efd6fb17-951e-4d8c-a768-ec826ca3ae50'
-AND start_date >= CURRENT_DATE - INTERVAL '1 day' AND start_date < CURRENT_DATE + INTERVAL '1 day'
+AND start_date >= (now() AT TIME ZONE 'America/Los_Angeles')::date - INTERVAL '1 day' AND start_date < (now() AT TIME ZONE 'America/Los_Angeles')::date + INTERVAL '1 day'
 ORDER BY start_date;
 ```
 
