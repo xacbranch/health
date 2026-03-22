@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { getAllScheduleEvents } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
+import { ensureAuth } from "@/lib/supabase-data";
 import { format } from "date-fns";
 
 /* ─── Category config ─── */
@@ -78,11 +79,13 @@ export default function LogPage() {
   // Fetch daily_checklist from Supabase for selected date
   useEffect(() => {
     async function fetchChecklist() {
+      await ensureAuth();
       const sb = createClient();
-      const { data } = await sb
+      const { data, error } = await sb
         .from("daily_checklist")
         .select("key, label, completed, completed_at, notes")
         .eq("date", selectedDate);
+      if (error) console.error("checklist fetch:", error.message);
       setChecklistData(data || []);
     }
     fetchChecklist();

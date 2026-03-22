@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CalendarDayEvent } from "@/types";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
+import { ensureAuth } from "@/lib/supabase-data";
 
 /* ─── Config ─── */
 const WAKE_HOUR = 7;
@@ -78,6 +79,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
   useEffect(() => {
     async function fetchWeekChecklist() {
       if (days.length === 0) return;
+      await ensureAuth();
       const sb = createClient();
       const dates = days.map((d) => localDate(d.date));
       const { data } = await sb
