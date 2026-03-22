@@ -22,13 +22,14 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className="min-h-full bg-black text-text scanlines noise-overlay vignette">
-        <div className="flex min-h-screen hex-grid">
-          <StoreHydrator />
-          <Nav />
-          <main className="flex-1 ml-0 md:ml-52 min-h-screen relative overflow-hidden min-w-0">
-            {children}
-          </main>
-        </div>
+        <StoreHydrator>
+          <div className="flex min-h-screen hex-grid">
+            <Nav />
+            <main className="flex-1 ml-0 md:ml-52 min-h-screen relative overflow-hidden min-w-0">
+              {children}
+            </main>
+          </div>
+        </StoreHydrator>
       </body>
     </html>
   );

@@ -18,6 +18,7 @@ export default function WorkoutsPage() {
   const {
     workouts, addWorkout, updateWorkout, deleteWorkout,
     addExercise, updateExercise, deleteExercise, toggleExercise,
+    appleWorkouts,
   } = useStore();
 
   const [sessionModal, setSessionModal] = useState(false);
@@ -343,6 +344,39 @@ export default function WorkoutsPage() {
           </div>
         </div>
       </div>
+
+      {/* Apple Watch Workout History */}
+      {appleWorkouts.length > 0 && (
+        <div className="hud-panel p-4 corner-brackets">
+          <div className="eva-label mb-3">APPLE WATCH HISTORY</div>
+          <div className="space-y-1">
+            {[...appleWorkouts].sort((a, b) => b.start_date.localeCompare(a.start_date)).slice(0, 30).map((w) => {
+              const dateStr = w.start_date?.slice(0, 10) || "";
+              const time = w.start_date
+                ? new Date(w.start_date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Los_Angeles" })
+                : "";
+              return (
+                <div key={w.id || w.start_date} className="flex items-center justify-between py-2 border-b border-border/20">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[8px] text-cyan/60 tabular-nums w-20">{dateStr}</span>
+                    <span className="text-[8px] text-text-dim tabular-nums w-16">{time}</span>
+                    <div>
+                      <div className="font-mono text-[11px] font-bold text-text">{w.activity_type}</div>
+                      <div className="font-mono text-[9px] text-text-dim">
+                        {w.duration_minutes ? `${Math.round(w.duration_minutes)}min` : ""}
+                        {w.avg_hr ? ` | avg ${Math.round(w.avg_hr)} bpm` : ""}
+                        {w.max_hr ? ` | max ${Math.round(w.max_hr)} bpm` : ""}
+                        {w.total_energy ? ` | ${Math.round(w.total_energy)} cal` : ""}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-[7px] tracking-wider text-text-dim/40">{w.source || "Apple Watch"}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Session Modal */}
       <MagiModal
