@@ -9,6 +9,26 @@ import type {
 } from "@/types";
 import { getChecklist, getAllScheduleEvents } from "@/lib/data";
 import { fetchAll, fetchByRange } from "@/lib/supabase-data";
+import { createClient } from "@/lib/supabase/client";
+
+/* ─── Supabase helper (fire-and-forget writes) ─── */
+const sb = createClient();
+
+function dbInsert(table: string, row: Record<string, unknown>) {
+  sb.from(table).insert(row).then(({ error }) => {
+    if (error) console.error(`db insert ${table}:`, error.message);
+  });
+}
+function dbUpdate(table: string, id: string, updates: Record<string, unknown>) {
+  sb.from(table).update(updates).eq("id", id).then(({ error }) => {
+    if (error) console.error(`db update ${table}:`, error.message);
+  });
+}
+function dbDelete(table: string, id: string) {
+  sb.from(table).delete().eq("id", id).then(({ error }) => {
+    if (error) console.error(`db delete ${table}:`, error.message);
+  });
+}
 
 /* ─── ID helper ─── */
 let _counter = Date.now();
@@ -111,6 +131,11 @@ interface Store {
   addScheduleEvent: (e: Omit<ScheduleEvent, "id">) => void;
   updateScheduleEvent: (id: string, e: Partial<Omit<ScheduleEvent, "id">>) => void;
   deleteScheduleEvent: (id: string) => void;
+
+  /* ── Meals ── */
+  addMeal: (m: Omit<Meal, "id">) => void;
+  updateMeal: (id: string, m: Partial<Omit<Meal, "id">>) => void;
+  deleteMeal: (id: string) => void;
 }
 
 export const useStore = create<Store>((set, get) => ({
@@ -183,10 +208,10 @@ export const useStore = create<Store>((set, get) => ({
           sleepSessions: data.sleepSessions,
           meals: data.meals,
         });
-        console.log("✅ Store hydrated from Supabase");
+        console.log("Store hydrated from Supabase");
       } else {
         set({ hydrated: true, dataSource: "seed" });
-        console.log("⚠️ Using seed data (Supabase auth failed)");
+        console.log("Using seed data (Supabase auth failed)");
       }
     } catch (err) {
       console.error("Hydration error:", err);
@@ -194,149 +219,216 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
 
-  /* ── Body Measurements CRUD ── */
-  addBodyMeasurement: (m) =>
-    set((s) => ({ bodyMeasurements: [...s.bodyMeasurements, { ...m, id: uid("bm") }] })),
-  updateBodyMeasurement: (id, m) =>
-    set((s) => ({ bodyMeasurements: s.bodyMeasurements.map((x) => (x.id === id ? { ...x, ...m } : x)) })),
-  deleteBodyMeasurement: (id) =>
-    set((s) => ({ bodyMeasurements: s.bodyMeasurements.filter((x) => x.id !== id) })),
+  /* ══════════════════════════════════════════
+     CRUD — each action updates local state
+     AND persists to Supabase
+     ══════════════════════════════════════════ */
 
-  /* ── Weigh-ins CRUD ── */
-  addWeighIn: (w) =>
-    set((s) => ({ weighIns: [...s.weighIns, { ...w, id: uid("w") }] })),
-  updateWeighIn: (id, w) =>
-    set((s) => ({ weighIns: s.weighIns.map((x) => (x.id === id ? { ...x, ...w } : x)) })),
-  deleteWeighIn: (id) =>
-    set((s) => ({ weighIns: s.weighIns.filter((x) => x.id !== id) })),
+  /* ── Body Measurements ── */
+  addBodyMeasurement: (m) => {
+    const id = uid("bm");
+    const row = { ...m, id };
+    set((s) => ({ bodyMeasurements: [...s.bodyMeasurements, row] }));
+    dbInsert("body_measurements", { ...m, source: "manual" });
+  },
+  updateBodyMeasurement: (id, m) => {
+    set((s) => ({ bodyMeasurements: s.bodyMeasurements.map((x) => (x.id === id ? { ...x, ...m } : x)) }));
+    dbUpdate("body_measurements", id, m);
+  },
+  deleteBodyMeasurement: (id) => {
+    set((s) => ({ bodyMeasurements: s.bodyMeasurements.filter((x) => x.id !== id) }));
+    dbDelete("body_measurements", id);
+  },
 
-  /* ── Goals CRUD ── */
-  addGoal: (g) =>
-    set((s) => ({ goals: [...s.goals, { ...g, id: uid("g") }] })),
-  updateGoal: (id, g) =>
-    set((s) => ({ goals: s.goals.map((x) => (x.id === id ? { ...x, ...g } : x)) })),
-  deleteGoal: (id) =>
-    set((s) => ({ goals: s.goals.filter((x) => x.id !== id) })),
+  /* ── Weigh-ins ── */
+  addWeighIn: (w) => {
+    const id = uid("w");
+    set((s) => ({ weighIns: [...s.weighIns, { ...w, id }] }));
+    dbInsert("weigh_ins", { ...w, source: "manual" });
+  },
+  updateWeighIn: (id, w) => {
+    set((s) => ({ weighIns: s.weighIns.map((x) => (x.id === id ? { ...x, ...w } : x)) }));
+    dbUpdate("weigh_ins", id, w);
+  },
+  deleteWeighIn: (id) => {
+    set((s) => ({ weighIns: s.weighIns.filter((x) => x.id !== id) }));
+    dbDelete("weigh_ins", id);
+  },
 
-  /* ── Supplements CRUD ── */
-  addSupplement: (sup) =>
-    set((s) => ({ supplements: [...s.supplements, { ...sup, id: uid("s") }] })),
-  updateSupplement: (id, sup) =>
-    set((s) => ({ supplements: s.supplements.map((x) => (x.id === id ? { ...x, ...sup } : x)) })),
-  deleteSupplement: (id) =>
-    set((s) => ({ supplements: s.supplements.filter((x) => x.id !== id) })),
+  /* ── Goals ── */
+  addGoal: (g) => {
+    const id = uid("g");
+    set((s) => ({ goals: [...s.goals, { ...g, id }] }));
+    dbInsert("goals", g);
+  },
+  updateGoal: (id, g) => {
+    set((s) => ({ goals: s.goals.map((x) => (x.id === id ? { ...x, ...g } : x)) }));
+    dbUpdate("goals", id, g);
+  },
+  deleteGoal: (id) => {
+    set((s) => ({ goals: s.goals.filter((x) => x.id !== id) }));
+    dbDelete("goals", id);
+  },
 
-  /* ── Workouts CRUD ── */
-  addWorkout: (w) =>
-    set((s) => ({
-      workouts: [
-        ...s.workouts,
-        {
-          ...w,
-          id: uid("wk"),
-          exercises: (w.exercises || []).map((ex) => ({ ...ex, id: uid("ex") })),
-        },
-      ],
-    })),
-  updateWorkout: (id, w) =>
-    set((s) => ({ workouts: s.workouts.map((x) => (x.id === id ? { ...x, ...w } : x)) })),
-  deleteWorkout: (id) =>
-    set((s) => ({ workouts: s.workouts.filter((x) => x.id !== id) })),
-  addExercise: (workoutId, ex) =>
+  /* ── Supplements ── */
+  addSupplement: (sup) => {
+    const id = uid("s");
+    set((s) => ({ supplements: [...s.supplements, { ...sup, id }] }));
+    dbInsert("supplements", sup);
+  },
+  updateSupplement: (id, sup) => {
+    set((s) => ({ supplements: s.supplements.map((x) => (x.id === id ? { ...x, ...sup } : x)) }));
+    dbUpdate("supplements", id, sup);
+  },
+  deleteSupplement: (id) => {
+    set((s) => ({ supplements: s.supplements.filter((x) => x.id !== id) }));
+    dbDelete("supplements", id);
+  },
+
+  /* ── Workouts ── */
+  addWorkout: (w) => {
+    const id = uid("wk");
+    const exercises = (w.exercises || []).map((ex) => ({ ...ex, id: uid("ex") }));
+    const row = { ...w, id, exercises };
+    set((s) => ({ workouts: [...s.workouts, row] }));
+    // Insert session, then exercises
+    const { exercises: _, ...session } = { ...w };
+    dbInsert("workout_sessions", { ...session, id });
+    for (const ex of exercises) {
+      dbInsert("exercises", { ...ex, workout_session_id: id });
+    }
+  },
+  updateWorkout: (id, w) => {
+    set((s) => ({ workouts: s.workouts.map((x) => (x.id === id ? { ...x, ...w } : x)) }));
+    dbUpdate("workout_sessions", id, w);
+  },
+  deleteWorkout: (id) => {
+    set((s) => ({ workouts: s.workouts.filter((x) => x.id !== id) }));
+    // Delete exercises first (cascade might handle this, but be safe)
+    sb.from("exercises").delete().eq("workout_session_id", id).then(() => {
+      dbDelete("workout_sessions", id);
+    });
+  },
+  addExercise: (workoutId, ex) => {
+    const id = uid("ex");
     set((s) => ({
       workouts: s.workouts.map((wk) =>
         wk.id === workoutId
-          ? { ...wk, exercises: [...wk.exercises, { ...ex, id: uid("ex") }] }
+          ? { ...wk, exercises: [...wk.exercises, { ...ex, id }] }
           : wk,
       ),
-    })),
-  updateExercise: (workoutId, exerciseId, ex) =>
+    }));
+    dbInsert("exercises", { ...ex, id, workout_session_id: workoutId });
+  },
+  updateExercise: (workoutId, exerciseId, ex) => {
     set((s) => ({
       workouts: s.workouts.map((wk) =>
         wk.id === workoutId
-          ? {
-              ...wk,
-              exercises: wk.exercises.map((e) =>
-                e.id === exerciseId ? { ...e, ...ex } : e,
-              ),
-            }
+          ? { ...wk, exercises: wk.exercises.map((e) => e.id === exerciseId ? { ...e, ...ex } : e) }
           : wk,
       ),
-    })),
-  deleteExercise: (workoutId, exerciseId) =>
+    }));
+    dbUpdate("exercises", exerciseId, ex);
+  },
+  deleteExercise: (workoutId, exerciseId) => {
     set((s) => ({
       workouts: s.workouts.map((wk) =>
         wk.id === workoutId
           ? { ...wk, exercises: wk.exercises.filter((e) => e.id !== exerciseId) }
           : wk,
       ),
-    })),
-  toggleExercise: (workoutId, exerciseId) =>
+    }));
+    dbDelete("exercises", exerciseId);
+  },
+  toggleExercise: (workoutId, exerciseId) => {
+    const wk = get().workouts.find((w) => w.id === workoutId);
+    const ex = wk?.exercises.find((e) => e.id === exerciseId);
+    const newCompleted = !(ex?.completed ?? false);
     set((s) => ({
       workouts: s.workouts.map((wk) =>
         wk.id === workoutId
-          ? {
-              ...wk,
-              exercises: wk.exercises.map((e) =>
-                e.id === exerciseId ? { ...e, completed: !e.completed } : e,
-              ),
-            }
+          ? { ...wk, exercises: wk.exercises.map((e) => e.id === exerciseId ? { ...e, completed: newCompleted } : e) }
           : wk,
       ),
-    })),
+    }));
+    dbUpdate("exercises", exerciseId, { completed: newCompleted });
+  },
 
-  /* ── Health Metrics CRUD ── */
-  addHealthMetric: (m) =>
-    set((s) => ({ healthMetrics: [...s.healthMetrics, m] })),
-  updateHealthMetric: (date, m) =>
-    set((s) => ({
-      healthMetrics: s.healthMetrics.map((x) =>
-        x.date === date ? { ...x, ...m } : x,
-      ),
-    })),
-  deleteHealthMetric: (date) =>
-    set((s) => ({ healthMetrics: s.healthMetrics.filter((x) => x.date !== date) })),
+  /* ── Health Metrics ── */
+  addHealthMetric: (m) => {
+    set((s) => ({ healthMetrics: [...s.healthMetrics, m] }));
+    dbInsert("health_metrics", { ...m, source: "manual" });
+  },
+  updateHealthMetric: (date, m) => {
+    set((s) => ({ healthMetrics: s.healthMetrics.map((x) => x.date === date ? { ...x, ...m } : x) }));
+    // Update by date since health_metrics keys on (user_id, date)
+    sb.from("health_metrics").update(m).eq("date", date).then(({ error }) => {
+      if (error) console.error("db update health_metrics:", error.message);
+    });
+  },
+  deleteHealthMetric: (date) => {
+    set((s) => ({ healthMetrics: s.healthMetrics.filter((x) => x.date !== date) }));
+    sb.from("health_metrics").delete().eq("date", date).then(({ error }) => {
+      if (error) console.error("db delete health_metrics:", error.message);
+    });
+  },
 
-  /* ── Bloodwork CRUD ── */
-  addBloodworkPanel: (p) =>
-    set((s) => ({
-      bloodwork: [...s.bloodwork, { ...p, id: uid("bp"), markers: p.markers || [] }],
-    })),
-  updateBloodworkPanel: (id, p) =>
-    set((s) => ({
-      bloodwork: s.bloodwork.map((x) => (x.id === id ? { ...x, ...p } : x)),
-    })),
-  deleteBloodworkPanel: (id) =>
-    set((s) => ({ bloodwork: s.bloodwork.filter((x) => x.id !== id) })),
-  addBloodworkMarker: (panelId, m) =>
+  /* ── Bloodwork ── */
+  addBloodworkPanel: (p) => {
+    const id = uid("bp");
+    const markers = p.markers || [];
+    set((s) => ({ bloodwork: [...s.bloodwork, { ...p, id, markers }] }));
+    const { markers: _, ...panel } = p;
+    dbInsert("bloodwork_panels", { ...panel, id });
+    for (const m of markers) {
+      dbInsert("bloodwork_markers", { ...m, panel_id: id });
+    }
+  },
+  updateBloodworkPanel: (id, p) => {
+    set((s) => ({ bloodwork: s.bloodwork.map((x) => (x.id === id ? { ...x, ...p } : x)) }));
+    dbUpdate("bloodwork_panels", id, p);
+  },
+  deleteBloodworkPanel: (id) => {
+    set((s) => ({ bloodwork: s.bloodwork.filter((x) => x.id !== id) }));
+    sb.from("bloodwork_markers").delete().eq("panel_id", id).then(() => {
+      dbDelete("bloodwork_panels", id);
+    });
+  },
+  addBloodworkMarker: (panelId, m) => {
     set((s) => ({
       bloodwork: s.bloodwork.map((p) =>
         p.id === panelId ? { ...p, markers: [...p.markers, m] } : p,
       ),
-    })),
-  updateBloodworkMarker: (panelId, markerName, m) =>
+    }));
+    dbInsert("bloodwork_markers", { ...m, panel_id: panelId });
+  },
+  updateBloodworkMarker: (panelId, markerName, m) => {
     set((s) => ({
       bloodwork: s.bloodwork.map((p) =>
         p.id === panelId
-          ? {
-              ...p,
-              markers: p.markers.map((mk) =>
-                mk.name === markerName ? { ...mk, ...m } : mk,
-              ),
-            }
+          ? { ...p, markers: p.markers.map((mk) => mk.name === markerName ? { ...mk, ...m } : mk) }
           : p,
       ),
-    })),
-  deleteBloodworkMarker: (panelId, markerName) =>
+    }));
+    // Update by composite key (panel_id + name)
+    sb.from("bloodwork_markers").update(m).eq("panel_id", panelId).eq("name", markerName).then(({ error }) => {
+      if (error) console.error("db update bloodwork_markers:", error.message);
+    });
+  },
+  deleteBloodworkMarker: (panelId, markerName) => {
     set((s) => ({
       bloodwork: s.bloodwork.map((p) =>
         p.id === panelId
           ? { ...p, markers: p.markers.filter((mk) => mk.name !== markerName) }
           : p,
       ),
-    })),
+    }));
+    sb.from("bloodwork_markers").delete().eq("panel_id", panelId).eq("name", markerName).then(({ error }) => {
+      if (error) console.error("db delete bloodwork_markers:", error.message);
+    });
+  },
 
-  /* ── Checklist CRUD ── */
+  /* ── Checklist ── */
   toggleChecklist: (key) =>
     set((s) => ({
       checklist: s.checklist.map((c) =>
@@ -351,19 +443,33 @@ export const useStore = create<Store>((set, get) => ({
   deleteChecklistItem: (key) =>
     set((s) => ({ checklist: s.checklist.filter((c) => c.key !== key) })),
 
-  /* ── Schedule Events CRUD ── */
-  addScheduleEvent: (e) =>
-    set((s) => ({
-      scheduleEvents: [...s.scheduleEvents, { ...e, id: uid("se") }],
-    })),
-  updateScheduleEvent: (id, e) =>
-    set((s) => ({
-      scheduleEvents: s.scheduleEvents.map((x) =>
-        x.id === id ? { ...x, ...e } : x,
-      ),
-    })),
-  deleteScheduleEvent: (id) =>
-    set((s) => ({
-      scheduleEvents: s.scheduleEvents.filter((x) => x.id !== id),
-    })),
+  /* ── Schedule Events ── */
+  addScheduleEvent: (e) => {
+    const id = uid("se");
+    set((s) => ({ scheduleEvents: [...s.scheduleEvents, { ...e, id }] }));
+    dbInsert("schedule_events", { ...e, id });
+  },
+  updateScheduleEvent: (id, e) => {
+    set((s) => ({ scheduleEvents: s.scheduleEvents.map((x) => x.id === id ? { ...x, ...e } : x) }));
+    dbUpdate("schedule_events", id, e);
+  },
+  deleteScheduleEvent: (id) => {
+    set((s) => ({ scheduleEvents: s.scheduleEvents.filter((x) => x.id !== id) }));
+    dbDelete("schedule_events", id);
+  },
+
+  /* ── Meals ── */
+  addMeal: (m) => {
+    const id = uid("ml");
+    set((s) => ({ meals: [...s.meals, { ...m, id }] }));
+    dbInsert("meals", m);
+  },
+  updateMeal: (id, m) => {
+    set((s) => ({ meals: s.meals.map((x) => (x.id === id ? { ...x, ...m } : x)) }));
+    dbUpdate("meals", id, m);
+  },
+  deleteMeal: (id) => {
+    set((s) => ({ meals: s.meals.filter((x) => x.id !== id) }));
+    dbDelete("meals", id);
+  },
 }));
