@@ -1,43 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip,
+  ReferenceArea, ReferenceLine,
+} from "recharts";
 import { useStore } from "@/lib/store";
+import { createClient } from "@/lib/supabase/client";
+import { ensureAuth } from "@/lib/supabase-data";
+import { InsightButton } from "@/components/ui/InsightButton";
 import type { BloodworkPanel, BloodworkMarker } from "@/types";
 import MagiModal from "@/components/ui/MagiModal";
 import MagiConfirm from "@/components/ui/MagiConfirm";
 import { MagiInput, MagiNumber, MagiSelect } from "@/components/ui/MagiField";
 
-const TREND_MARKERS = ["Vitamin D", "Total Testosterone", "TSH", "Free T4"];
+const AXIS_STYLE = { fill: "#333", fontSize: 8, fontFamily: "Monument Mono" };
+
+/* ─── Marker colors (rotate) ─── */
+const MARKER_COLORS: Record<string, string> = {
+  "Vitamin D": "#FFB800",
+  "Total Testosterone": "#00D0FF",
+  "TSH": "#FF6A00",
+  "Free T4": "#6B21A8",
+  "Glucose": "#39FF14",
+  "Total Cholesterol": "#FF6A00",
+  "LDL": "#FF1A1A",
+  "HDL": "#39FF14",
+  "Triglycerides": "#FFB800",
+  "Iron": "#00D0FF",
+  "Ferritin": "#6B21A8",
+};
+const DEFAULT_COLOR = "#FF6A00";
+
+function getMarkerColor(name: string): string {
+  return MARKER_COLORS[name] || DEFAULT_COLOR;
+}
 
 function getStatusBadge(flag: BloodworkMarker["flag"]) {
   switch (flag) {
     case "normal":
-      return (
-        <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider bg-positive/10 text-positive border border-positive/20">
-          NOMINAL
-        </span>
-      );
+      return <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider bg-positive/10 text-positive border border-positive/20">NOMINAL</span>;
     case "low":
-      return (
-        <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider bg-warning/10 text-warning border border-warning/20">
-          LOW
-        </span>
-      );
+      return <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider bg-warning/10 text-warning border border-warning/20">LOW</span>;
     case "high":
-      return (
-        <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider bg-danger/10 text-danger border border-danger/20">
-          HIGH
-        </span>
-      );
+      return <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider bg-danger/10 text-danger border border-danger/20">HIGH</span>;
   }
 }
 
-function getTrendColor(oldVal: number, newVal: number, refLow: number, refHigh: number): string {
-  const midRef = (refLow + refHigh) / 2;
-  const oldDist = Math.abs(oldVal - midRef);
-  const newDist = Math.abs(newVal - midRef);
-  if (Math.abs(oldDist - newDist) < 0.5) return "text-text-dim";
-  return newDist < oldDist ? "text-positive" : "text-danger";
+function autoFlag(value: number, refLow: number, refHigh: number): BloodworkMarker["flag"] {
+  if (value < refLow) return "low";
+  if (value > refHigh) return "high";
+  return "normal";
+}
+
+/* ─── Build trend data for a single marker across all panels ─── */
+interface MarkerTrend {
+  name: string;
+  unit: string;
+  refLow: number;
+  refHigh: number;
+  points: { date: string; value: number; flag: string }[];
+  latest: number;
+  latestFlag: string;
+  delta: number | null;
+  color: string;
+}
+
+function buildMarkerTrends(panels: BloodworkPanel[]): MarkerTrend[] {
+  const sorted = [...panels].sort((a, b) => a.date.localeCompare(b.date));
+  const markerMap = new Map<string, MarkerTrend>();
+
+  for (const panel of sorted) {
+    for (const m of panel.markers) {
+      if (!markerMap.has(m.name)) {
+        markerMap.set(m.name, {
+          name: m.name,
+          unit: m.unit,
+          refLow: m.ref_low,
+          refHigh: m.ref_high,
+          points: [],
+          latest: m.value,
+          latestFlag: m.flag,
+          delta: null,
+          color: getMarkerColor(m.name),
+        });
+      }
+      const trend = markerMap.get(m.name)!;
+      trend.points.push({ date: panel.date, value: m.value, flag: m.flag });
+      trend.refLow = m.ref_low;
+      trend.refHigh = m.ref_high;
+      trend.latest = m.value;
+      trend.latestFlag = m.flag;
+    }
+  }
+
+  // Compute deltas
+  for (const trend of markerMap.values()) {
+    if (trend.points.length >= 2) {
+      const prev = trend.points[trend.points.length - 2].value;
+      trend.delta = +(trend.latest - prev).toFixed(1);
+    }
+  }
+
+  return [...markerMap.values()];
 }
 
 const emptyPanel = { date: "", lab: "", physician: "" };
@@ -45,253 +110,253 @@ const emptyMarker: BloodworkMarker = { name: "", value: 0, unit: "", ref_low: 0,
 
 export default function BloodworkPage() {
   const {
-    bloodwork,
+    bloodwork: storeBloodwork,
     addBloodworkPanel, updateBloodworkPanel, deleteBloodworkPanel,
     addBloodworkMarker, updateBloodworkMarker, deleteBloodworkMarker,
   } = useStore();
 
-  const [selectedPanelId, setSelectedPanelId] = useState(
-    bloodwork[bloodwork.length - 1]?.id ?? ""
-  );
+  // Direct fetch backup
+  const [directBloodwork, setDirectBloodwork] = useState<BloodworkPanel[]>([]);
+  useEffect(() => {
+    async function load() {
+      await ensureAuth();
+      const sb = createClient();
+      const { data } = await sb
+        .from("bloodwork_panels")
+        .select("*, markers:bloodwork_markers(*)")
+        .order("date", { ascending: true });
+      if (data?.length) setDirectBloodwork(data);
+    }
+    load();
+  }, []);
 
-  // Panel CRUD state
+  const bloodwork = storeBloodwork.length >= directBloodwork.length ? storeBloodwork : directBloodwork;
+  const trends = useMemo(() => buildMarkerTrends(bloodwork), [bloodwork]);
+
+  // Panel CRUD
   const [panelModal, setPanelModal] = useState(false);
   const [editingPanel, setEditingPanel] = useState<BloodworkPanel | null>(null);
   const [panelForm, setPanelForm] = useState(emptyPanel);
   const [deletePanelTarget, setDeletePanelTarget] = useState<BloodworkPanel | null>(null);
 
-  // Marker CRUD state
+  // Marker CRUD
   const [markerModal, setMarkerModal] = useState(false);
   const [editingMarkerName, setEditingMarkerName] = useState<string | null>(null);
   const [markerForm, setMarkerForm] = useState<BloodworkMarker>(emptyMarker);
   const [deleteMarkerTarget, setDeleteMarkerTarget] = useState<{ panelId: string; name: string } | null>(null);
+  const [selectedPanelId, setSelectedPanelId] = useState("");
+
+  // Select latest panel by default
+  useEffect(() => {
+    if (bloodwork.length && !selectedPanelId) {
+      setSelectedPanelId(bloodwork[bloodwork.length - 1].id);
+    }
+  }, [bloodwork, selectedPanelId]);
 
   const selectedPanel = bloodwork.find((p) => p.id === selectedPanelId);
 
-  // Trend data
-  const trendData = TREND_MARKERS.map((name) => {
-    const older = bloodwork.length >= 2 ? bloodwork[0].markers.find((m) => m.name === name) : null;
-    const newer = bloodwork.length >= 2 ? bloodwork[1].markers.find((m) => m.name === name) : null;
-    if (!older || !newer) return null;
-    return {
-      name,
-      oldVal: older.value,
-      newVal: newer.value,
-      unit: newer.unit,
-      refLow: newer.ref_low,
-      refHigh: newer.ref_high,
-      color: getTrendColor(older.value, newer.value, newer.ref_low, newer.ref_high),
-    };
-  }).filter(Boolean) as { name: string; oldVal: number; newVal: number; unit: string; refLow: number; refHigh: number; color: string }[];
-
-  // Panel handlers
   function openAddPanel() {
     setEditingPanel(null);
     setPanelForm({ date: new Date().toISOString().split("T")[0], lab: "", physician: "" });
     setPanelModal(true);
   }
-
   function openEditPanel(p: BloodworkPanel) {
     setEditingPanel(p);
     setPanelForm({ date: p.date, lab: p.lab, physician: p.physician });
     setPanelModal(true);
   }
-
   function handleSavePanel() {
     if (!panelForm.date) return;
-    if (editingPanel) {
-      updateBloodworkPanel(editingPanel.id, panelForm);
-    } else {
-      addBloodworkPanel(panelForm);
-    }
+    if (editingPanel) updateBloodworkPanel(editingPanel.id, panelForm);
+    else addBloodworkPanel(panelForm);
     setPanelModal(false);
   }
 
-  // Marker handlers
   function openAddMarker() {
     if (!selectedPanel) return;
     setEditingMarkerName(null);
     setMarkerForm(emptyMarker);
     setMarkerModal(true);
   }
-
   function openEditMarker(m: BloodworkMarker) {
     setEditingMarkerName(m.name);
     setMarkerForm({ ...m });
     setMarkerModal(true);
   }
-
   function handleSaveMarker() {
     if (!selectedPanel || !markerForm.name.trim()) return;
-    if (editingMarkerName) {
-      updateBloodworkMarker(selectedPanel.id, editingMarkerName, markerForm);
-    } else {
-      addBloodworkMarker(selectedPanel.id, markerForm);
-    }
+    if (editingMarkerName) updateBloodworkMarker(selectedPanel.id, editingMarkerName, markerForm);
+    else addBloodworkMarker(selectedPanel.id, markerForm);
     setMarkerModal(false);
   }
 
-  function autoFlag(value: number, refLow: number, refHigh: number): BloodworkMarker["flag"] {
-    if (value < refLow) return "low";
-    if (value > refHigh) return "high";
-    return "normal";
-  }
-
   return (
-    <div className="p-4 md:p-6 pb-24 md:pb-6 space-y-4">
+    <div className="p-3 md:p-4 pb-20 md:pb-4 space-y-3">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between mb-1">
         <div>
-          <div className="eva-label mb-1">DIAGNOSTICS MODULE</div>
-          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-text-bright">
-            BLOODWORK ANALYSIS
+          <h1 className="text-xl md:text-2xl font-black tracking-tight eva-text flex items-center gap-2">
+            BLOODWORK
+            <span className="text-[8px] font-bold tracking-[0.2em] text-text-dim font-mono mt-1">
+              // DIAGNOSTICS
+            </span>
           </h1>
         </div>
-        <button
-          onClick={openAddPanel}
-          className="px-3 py-1.5 text-[8px] font-bold tracking-wider text-eva border border-eva/40 hover:bg-eva/10 transition-colors"
-        >
+        <button onClick={openAddPanel} className="px-3 py-1.5 text-[8px] font-bold tracking-wider text-eva border border-eva/40 hover:bg-eva/10 transition-colors">
           + ADD PANEL
         </button>
       </div>
 
-      {/* Panel selector */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {bloodwork.map((panel) => (
-          <div
-            key={panel.id}
-            className={`p-4 text-left transition-all cursor-pointer group ${
-              selectedPanelId === panel.id
-                ? "hud-panel corner-brackets border-eva/30"
-                : "hud-panel corner-brackets"
-            }`}
-            onClick={() => setSelectedPanelId(panel.id)}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="eva-label mb-2">{panel.lab.toUpperCase()}</div>
-                <div className="font-bold text-text-bright text-sm">{panel.date}</div>
-                <div className="font-mono text-[10px] text-text-dim mt-1">
-                  DR. {panel.physician.toUpperCase()}
-                </div>
-                <div className="font-mono text-[10px] text-text-dim mt-1">
-                  {panel.markers.length} MARKERS
-                </div>
+      {/* Summary: latest values for all markers */}
+      {trends.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {trends.map((t) => (
+            <div key={t.name} className="hud-panel p-2.5 corner-brackets">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[7px] tracking-[0.2em] text-text-dim">{t.name.toUpperCase()}</span>
+                {getStatusBadge(t.latestFlag as BloodworkMarker["flag"])}
               </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={(e) => { e.stopPropagation(); openEditPanel(panel); }}
-                  className="text-[7px] tracking-wider text-text-dim hover:text-eva transition-colors"
-                >
-                  EDIT
-                </button>
-                <span className="text-text-dim/30">|</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setDeletePanelTarget(panel); }}
-                  className="text-[7px] tracking-wider text-text-dim hover:text-danger transition-colors"
-                >
-                  DEL
-                </button>
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg font-black tabular-nums" style={{ color: t.color }}>{t.latest}</span>
+                <span className="text-[8px] text-text-dim">{t.unit}</span>
+              </div>
+              {t.delta !== null && (
+                <div className={`text-[8px] mt-0.5 font-bold ${t.delta < 0 && t.latestFlag !== "low" ? "text-neon/60" : t.delta > 0 && t.latestFlag === "high" ? "text-danger/60" : "text-text-dim"}`}>
+                  {t.delta > 0 ? "+" : ""}{t.delta} from prev
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Trend graphs — one per marker */}
+      {trends.map((t) => (
+        <div key={t.name} className="hud-panel p-3 corner-brackets">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="eva-label text-[8px]">| {t.name.toUpperCase()}</div>
+              <div className="text-[7px] tracking-wider text-text-dim">
+                {t.refLow}--{t.refHigh} {t.unit}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <InsightButton
+                metric={t.name.toLowerCase().replace(/ /g, "_")}
+                data={t.points}
+                timeScale="ALL"
+                context={`Reference range: ${t.refLow}-${t.refHigh} ${t.unit}. Latest: ${t.latest} (${t.latestFlag}).`}
+              />
+              <div className="flex items-baseline gap-1">
+                <span className="data-readout text-lg" style={{ color: t.color }}>{t.latest}</span>
+                <span className="text-[8px] text-text-dim">{t.unit}</span>
               </div>
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* Marker table */}
-      {selectedPanel && (
-        <div className="hud-panel p-4 corner-brackets">
-          <div className="flex items-center justify-between mb-4">
-            <div className="eva-label">
-              PANEL RESULTS — {selectedPanel.date}
-            </div>
-            <button
-              onClick={openAddMarker}
-              className="text-[7px] tracking-wider text-eva hover:text-eva-bright transition-colors"
-            >
-              + ADD MARKER
-            </button>
+          <div className="h-36">
+            {t.points.length > 1 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={t.points}>
+                  {/* Reference range shading */}
+                  <ReferenceArea y1={t.refLow} y2={t.refHigh} fill={`${t.color}08`} />
+                  <ReferenceLine y={t.refLow} stroke={`${t.color}25`} strokeDasharray="3 3" />
+                  <ReferenceLine y={t.refHigh} stroke={`${t.color}25`} strokeDasharray="3 3" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={AXIS_STYLE} />
+                  <YAxis
+                    domain={[(min: number) => Math.floor(min * 0.85), (max: number) => Math.ceil(max * 1.15)]}
+                    axisLine={false} tickLine={false} tick={AXIS_STYLE} width={45}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "#0A0A0A", border: `1px solid ${t.color}30`,
+                      borderRadius: 0, fontFamily: "Monument Mono", fontSize: "10px", color: t.color,
+                    }}
+                    formatter={(val) => [`${val} ${t.unit}`, t.name]}
+                  />
+                  <Line
+                    type="monotone" dataKey="value" stroke={t.color} strokeWidth={2}
+                    dot={{ r: 4, fill: t.color, stroke: "#000", strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: t.color, strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-[9px] text-text-dim tracking-wider">
+                {t.points.length === 1 ? `${t.points[0].value} ${t.unit} on ${t.points[0].date} -- ADD MORE PANELS TO SEE TREND` : "NO DATA"}
+              </div>
+            )}
           </div>
 
-          {/* Header row */}
-          <div className="grid grid-cols-5 gap-2 pb-2 mb-2 border-b border-border">
-            <div className="eva-label">MARKER</div>
-            <div className="eva-label">VALUE</div>
-            <div className="eva-label">RANGE</div>
-            <div className="eva-label">STATUS</div>
-            <div className="eva-label text-right">ACTIONS</div>
-          </div>
-
-          {/* Marker rows */}
-          <div className="space-y-1">
-            {selectedPanel.markers.map((m) => (
-              <div
-                key={m.name}
-                className="grid grid-cols-5 gap-2 py-2 border-b border-border/50 items-center group/mk"
-              >
-                <div className="text-text font-mono text-xs">{m.name}</div>
-                <div className="data-readout text-sm">
-                  {m.value}
-                  <span className="text-text-dim font-mono text-[9px] ml-1">{m.unit}</span>
-                </div>
-                <div className="text-text-dim font-mono text-[10px]">
-                  {m.ref_low} — {m.ref_high}
-                </div>
-                <div>{getStatusBadge(m.flag)}</div>
-                <div className="flex justify-end gap-1 opacity-0 group-hover/mk:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => openEditMarker(m)}
-                    className="text-[7px] tracking-wider text-text-dim hover:text-eva transition-colors"
-                  >
-                    EDIT
-                  </button>
-                  <span className="text-text-dim/30">|</span>
-                  <button
-                    onClick={() => setDeleteMarkerTarget({ panelId: selectedPanel.id, name: m.name })}
-                    className="text-[7px] tracking-wider text-text-dim hover:text-danger transition-colors"
-                  >
-                    DEL
-                  </button>
-                </div>
+          {/* Data points row */}
+          <div className="flex items-center gap-4 mt-2 pt-2 border-t border-border">
+            {t.points.map((p, i) => (
+              <div key={p.date} className="text-[7px] tracking-wider text-text-dim">
+                {p.date.slice(5)}: <span style={{ color: p.flag === "normal" ? "#39FF14" : p.flag === "high" ? "#FF1A1A" : "#FFB800" }}>{p.value}</span>
               </div>
             ))}
           </div>
         </div>
-      )}
+      ))}
 
-      {/* Trend comparison */}
-      {trendData.length > 0 && (
-        <div className="hud-panel p-4 corner-brackets">
-          <div className="eva-label mb-4">
-            TREND ANALYSIS — {bloodwork[0].date} → {bloodwork[1].date}
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {trendData.map((t) => (
-              <div
-                key={t.name}
-                className="flex items-center justify-between p-3 bg-surface-2 border border-border/40"
-              >
-                <div>
-                  <div className="font-mono text-xs text-text">{t.name}</div>
-                  <div className="font-mono text-[10px] text-text-dim mt-0.5">
-                    {t.unit} · ref {t.refLow}–{t.refHigh}
+      {/* Panel selector + marker table for editing */}
+      <div className="hud-panel p-3 corner-brackets">
+        <div className="eva-label text-[8px] mb-3">| PANEL DATA</div>
+        <div className="flex gap-2 mb-3 flex-wrap">
+          {bloodwork.map((panel) => (
+            <button
+              key={panel.id}
+              onClick={() => setSelectedPanelId(panel.id)}
+              className={`px-3 py-1.5 text-[8px] font-bold tracking-wider transition-colors ${
+                selectedPanelId === panel.id
+                  ? "text-eva border border-eva/40 bg-eva/10"
+                  : "text-text-dim border border-border/40 hover:border-eva/30"
+              }`}
+            >
+              {panel.date}
+              <span className="text-text-dim/50 ml-1 opacity-0 group-hover:opacity-100">
+                {panel.markers.length} markers
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {selectedPanel && (
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[8px] text-text-dim tracking-wider">
+                {selectedPanel.lab} -- {selectedPanel.physician} -- {selectedPanel.markers.length} MARKERS
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => openEditPanel(selectedPanel)} className="text-[7px] tracking-wider text-text-dim hover:text-eva transition-colors">EDIT</button>
+                <button onClick={() => setDeletePanelTarget(selectedPanel)} className="text-[7px] tracking-wider text-text-dim hover:text-danger transition-colors">DEL</button>
+                <button onClick={openAddMarker} className="text-[7px] tracking-wider text-eva hover:text-eva-bright transition-colors">+ MARKER</button>
+              </div>
+            </div>
+
+            {/* Marker rows */}
+            <div className="space-y-px">
+              {selectedPanel.markers.map((m) => (
+                <div key={m.name} className="grid grid-cols-5 gap-2 py-1.5 border-b border-border/30 items-center group/mk">
+                  <div className="text-text font-mono text-[10px]">{m.name}</div>
+                  <div className="data-readout text-sm">
+                    {m.value} <span className="text-text-dim font-mono text-[8px]">{m.unit}</span>
+                  </div>
+                  <div className="text-text-dim font-mono text-[9px]">{m.ref_low}--{m.ref_high}</div>
+                  <div>{getStatusBadge(m.flag)}</div>
+                  <div className="flex justify-end gap-1 opacity-0 group-hover/mk:opacity-100 transition-opacity">
+                    <button onClick={() => openEditMarker(m)} className="text-[7px] tracking-wider text-text-dim hover:text-eva">EDIT</button>
+                    <button onClick={() => setDeleteMarkerTarget({ panelId: selectedPanel.id, name: m.name })} className="text-[7px] tracking-wider text-text-dim hover:text-danger">DEL</button>
                   </div>
                 </div>
-                <div className={`font-mono font-bold text-sm ${t.color}`}>
-                  {t.oldVal} → {t.newVal}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
-      {/* Panel Modal */}
-      <MagiModal
-        open={panelModal}
-        onClose={() => setPanelModal(false)}
-        title={editingPanel ? "EDIT PANEL" : "NEW PANEL"}
-      >
+      {/* Modals */}
+      <MagiModal open={panelModal} onClose={() => setPanelModal(false)} title={editingPanel ? "EDIT PANEL" : "NEW PANEL"}>
         <div className="space-y-3">
           <MagiInput label="DATE" type="date" value={panelForm.date} onChange={(v) => setPanelForm({ ...panelForm, date: v })} required />
           <MagiInput label="LAB" value={panelForm.lab} onChange={(v) => setPanelForm({ ...panelForm, lab: v })} placeholder="Quest Diagnostics, Labcorp..." />
@@ -303,12 +368,7 @@ export default function BloodworkPage() {
         </div>
       </MagiModal>
 
-      {/* Marker Modal */}
-      <MagiModal
-        open={markerModal}
-        onClose={() => setMarkerModal(false)}
-        title={editingMarkerName ? "EDIT MARKER" : "ADD MARKER"}
-      >
+      <MagiModal open={markerModal} onClose={() => setMarkerModal(false)} title={editingMarkerName ? "EDIT MARKER" : "ADD MARKER"}>
         <div className="space-y-3">
           <MagiInput label="MARKER NAME" value={markerForm.name} onChange={(v) => setMarkerForm({ ...markerForm, name: v })} placeholder="Vitamin D, TSH..." required />
           <div className="grid grid-cols-2 gap-3">
@@ -328,16 +388,11 @@ export default function BloodworkPage() {
               setMarkerForm({ ...markerForm, ref_high: high, flag: autoFlag(markerForm.value, markerForm.ref_low, high) });
             }} step={0.01} />
           </div>
-          <MagiSelect
-            label="FLAG"
-            value={markerForm.flag}
-            onChange={(v) => setMarkerForm({ ...markerForm, flag: v as BloodworkMarker["flag"] })}
-            options={[
-              { value: "normal", label: "Normal" },
-              { value: "low", label: "Low" },
-              { value: "high", label: "High" },
-            ]}
-          />
+          <MagiSelect label="FLAG" value={markerForm.flag} onChange={(v) => setMarkerForm({ ...markerForm, flag: v as BloodworkMarker["flag"] })} options={[
+            { value: "normal", label: "Normal" },
+            { value: "low", label: "Low" },
+            { value: "high", label: "High" },
+          ]} />
           <div className="flex justify-end gap-2 pt-3 border-t border-border/30">
             <button onClick={() => setMarkerModal(false)} className="px-3 py-1.5 text-[8px] font-bold tracking-wider text-text-dim hover:text-text border border-border/40 hover:border-border transition-colors">CANCEL</button>
             <button onClick={handleSaveMarker} className="px-3 py-1.5 text-[8px] font-bold tracking-wider text-eva border border-eva/40 hover:bg-eva/10 transition-colors">{editingMarkerName ? "UPDATE" : "ADD"} MARKER</button>
@@ -345,27 +400,13 @@ export default function BloodworkPage() {
         </div>
       </MagiModal>
 
-      {/* Delete Panel Confirm */}
-      <MagiConfirm
-        open={!!deletePanelTarget}
-        onClose={() => setDeletePanelTarget(null)}
+      <MagiConfirm open={!!deletePanelTarget} onClose={() => setDeletePanelTarget(null)}
         onConfirm={() => { if (deletePanelTarget) { deleteBloodworkPanel(deletePanelTarget.id); setDeletePanelTarget(null); } }}
-        title="DELETE PANEL"
-        message={`Remove panel from ${deletePanelTarget?.date}? All markers will be lost.`}
-        confirmLabel="DELETE"
-        danger
-      />
+        title="DELETE PANEL" message={`Remove panel from ${deletePanelTarget?.date}? All markers will be lost.`} confirmLabel="DELETE" danger />
 
-      {/* Delete Marker Confirm */}
-      <MagiConfirm
-        open={!!deleteMarkerTarget}
-        onClose={() => setDeleteMarkerTarget(null)}
+      <MagiConfirm open={!!deleteMarkerTarget} onClose={() => setDeleteMarkerTarget(null)}
         onConfirm={() => { if (deleteMarkerTarget) { deleteBloodworkMarker(deleteMarkerTarget.panelId, deleteMarkerTarget.name); setDeleteMarkerTarget(null); } }}
-        title="DELETE MARKER"
-        message={`Remove "${deleteMarkerTarget?.name}" from this panel?`}
-        confirmLabel="DELETE"
-        danger
-      />
+        title="DELETE MARKER" message={`Remove "${deleteMarkerTarget?.name}" from this panel?`} confirmLabel="DELETE" danger />
     </div>
   );
 }
