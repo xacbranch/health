@@ -135,11 +135,14 @@ export async function fetchAppleWorkouts(range?: DateRange): Promise<AppleWorkou
 }
 
 export async function fetchSleepSessions(range?: DateRange): Promise<SleepSession[]> {
-  let query = sb.from("sleep_sessions").select("*").order("start_date", { ascending: true });
-  query = applyRange(query, range, "start_date", 2000);
+  // Fetch most recent first, then reverse to chronological
+  let query = sb.from("sleep_sessions").select("*").order("start_date", { ascending: false });
+  if (range?.from) query = query.gte("start_date", range.from);
+  if (range?.to) query = query.lte("start_date", range.to);
+  if (!range?.from && !range?.to) query = query.limit(2000);
   const { data, error } = await query;
   if (error) { console.error("sleep_sessions:", error.message); return []; }
-  return data || [];
+  return (data || []).reverse();
 }
 
 export async function fetchMeals(range?: DateRange): Promise<Meal[]> {

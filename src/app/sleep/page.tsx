@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, Tooltip, ReferenceLine, Legend,
@@ -9,6 +9,8 @@ import { TimeScaleSelector, type TimeScale } from "@/components/ui/TimeScaleSele
 import { InsightButton } from "@/components/ui/InsightButton";
 import { useTimeScale } from "@/hooks/useTimeScale";
 import { autoDownsample } from "@/lib/downsample";
+import { createClient } from "@/lib/supabase/client";
+import { ensureAuth } from "@/lib/supabase-data";
 import type { SleepSession } from "@/types";
 
 /* ─── Colors ─── */
@@ -38,17 +40,29 @@ interface NightSummary {
   efficiency: number; // % (totalSleep / inBed * 100)
 }
 
+function toPT(date: Date): { dateStr: string; hour: number } {
+  const pt = new Date(date.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+  const y = pt.getFullYear();
+  const m = String(pt.getMonth() + 1).padStart(2, "0");
+  const d = String(pt.getDate()).padStart(2, "0");
+  return { dateStr: `${y}-${m}-${d}`, hour: pt.getHours() };
+}
+
 function aggregateSleepByNight(sessions: SleepSession[]): NightSummary[] {
   const nights = new Map<string, SleepSession[]>();
 
   for (const s of sessions) {
-    // Bucket by the date the person went to bed
-    // If start is after 6PM, count it as that night; if before 6PM, count as previous night
+    // Bucket by the PT date the person went to bed
+    // If PT hour is before 6 PM (18:00), it's early morning — assign to previous night
     const start = new Date(s.start_date);
-    const hour = start.getHours();
-    const d = new Date(start);
-    if (hour < 18) d.setDate(d.getDate() - 1); // early morning belongs to previous night
-    const key = d.toISOString().slice(0, 10);
+    const { dateStr, hour } = toPT(start);
+    let key = dateStr;
+    if (hour < 18) {
+      // Early morning — belongs to previous night
+      const prev = new Date(start);
+      prev.setDate(prev.getDate() - 1);
+      key = toPT(prev).dateStr;
+    }
 
     if (!nights.has(key)) nights.set(key, []);
     nights.get(key)!.push(s);
@@ -96,13 +110,16 @@ function aggregateSleepByNight(sessions: SleepSession[]): NightSummary[] {
       rem: +rem.toFixed(2),
       awake: +awake.toFixed(2),
       asleep: +asleep.toFixed(2),
-      bedTime: bedDate ? bedDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }) : "--:--",
-      wakeTime: wakeDate ? wakeDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }) : "--:--",
+      bedTime: bedDate ? bedDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Los_Angeles" }) : "--:--",
+      wakeTime: wakeDate ? wakeDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Los_Angeles" }) : "--:--",
       efficiency: +efficiency.toFixed(1),
     });
   }
 
-  return summaries.sort((a, b) => a.date.localeCompare(b.date));
+  // Filter out bad data: nights with less than 3 hours of actual sleep
+  return summaries
+    .filter((n) => n.totalSleep >= 3)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /* ─── Format helpers ─── */
@@ -123,9 +140,23 @@ export default function SleepPage() {
     customRange, setCustomRange,
   } = useTimeScale("30D");
 
+  // Direct fetch backup for sleep data
+  const [directSleep, setDirectSleep] = useState<SleepSession[]>([]);
+  useEffect(() => {
+    async function load() {
+      await ensureAuth();
+      const sb = createClient();
+      const { data: rows } = await sb.from("sleep_sessions").select("*")
+        .order("start_date", { ascending: false }).limit(2000);
+      if (rows?.length) setDirectSleep(rows.reverse());
+    }
+    load();
+  }, []);
+
+  const sleepSessions = data.sleepSessions.length >= directSleep.length ? data.sleepSessions : directSleep;
   const nights = useMemo(
-    () => aggregateSleepByNight(data.sleepSessions),
-    [data.sleepSessions],
+    () => aggregateSleepByNight(sleepSessions),
+    [sleepSessions],
   );
 
   const latest = nights[nights.length - 1];
@@ -144,10 +175,10 @@ export default function SleepPage() {
   const stageData = useMemo(() => {
     const raw = nights.map((n) => ({
       date: n.date,
-      deep: +(n.deep * 60).toFixed(0),
-      core: +(n.core * 60).toFixed(0),
-      rem: +(n.rem * 60).toFixed(0),
-      awake: +(n.awake * 60).toFixed(0),
+      deep: +n.deep.toFixed(1),
+      core: +n.core.toFixed(1),
+      rem: +n.rem.toFixed(1),
+      awake: +n.awake.toFixed(1),
     }));
     // For large ranges, sample every Nth night
     if (raw.length > 90) {
@@ -382,13 +413,13 @@ export default function SleepPage() {
                 <XAxis dataKey="dateLabel" axisLine={false} tickLine={false} tick={AXIS_STYLE}
                   interval={Math.max(0, Math.floor(stageData.length / 12))} />
                 <YAxis axisLine={false} tickLine={false} tick={AXIS_STYLE} width={35}
-                  label={{ value: "MIN", angle: -90, position: "insideLeft", fill: "#333", fontSize: 7 }} />
+                  label={{ value: "HRS", angle: -90, position: "insideLeft", fill: "#333", fontSize: 7 }} />
                 <Tooltip
                   contentStyle={{
                     background: "#0A0A0A", border: "1px solid #6B21A830",
                     borderRadius: 0, fontFamily: "Monument Mono", fontSize: "10px", color: "#ccc",
                   }}
-                  formatter={(val, name) => [`${val} min`, String(name).toUpperCase()]}
+                  formatter={(val, name) => [`${val} hrs`, String(name).toUpperCase()]}
                 />
                 <Bar dataKey="deep" stackId="sleep" fill={STAGE_COLORS.deep} />
                 <Bar dataKey="core" stackId="sleep" fill={STAGE_COLORS.core} />
