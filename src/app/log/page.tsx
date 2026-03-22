@@ -79,13 +79,46 @@ function localDate(d: Date = new Date()): string {
 }
 
 export default function LogPage() {
-  const meals = useStore((s) => s.meals);
-  const appleWorkouts = useStore((s) => s.appleWorkouts);
-  const weighIns = useStore((s) => s.weighIns);
-  const healthMetrics = useStore((s) => s.healthMetrics);
+  const storeMeals = useStore((s) => s.meals);
+  const storeAppleWorkouts = useStore((s) => s.appleWorkouts);
+  const storeWeighIns = useStore((s) => s.weighIns);
+  const storeHealthMetrics = useStore((s) => s.healthMetrics);
 
   const [selectedDate, setSelectedDate] = useState(localDate());
   const [checklistData, setChecklistData] = useState<ChecklistRow[]>([]);
+
+  // Direct fetch for today's data as backup
+  const [directData, setDirectData] = useState<{
+    meals: typeof storeMeals;
+    appleWorkouts: typeof storeAppleWorkouts;
+    weighIns: typeof storeWeighIns;
+    healthMetrics: typeof storeHealthMetrics;
+  } | null>(null);
+
+  useEffect(() => {
+    async function fetchDirect() {
+      await ensureAuth();
+      const sb = createClient();
+      const [mRes, wkRes, wiRes, hmRes] = await Promise.all([
+        sb.from("meals").select("*").order("date", { ascending: true }).limit(200),
+        sb.from("apple_workouts").select("*").order("start_date", { ascending: true }).limit(200),
+        sb.from("weigh_ins").select("*").order("date", { ascending: true }).limit(200),
+        sb.from("health_metrics").select("*").order("date", { ascending: true }).limit(90),
+      ]);
+      setDirectData({
+        meals: mRes.data || [],
+        appleWorkouts: wkRes.data || [],
+        weighIns: wiRes.data || [],
+        healthMetrics: hmRes.data || [],
+      });
+    }
+    fetchDirect();
+  }, []);
+
+  const meals = storeMeals.length >= (directData?.meals.length || 0) ? storeMeals : directData?.meals || [];
+  const appleWorkouts = storeAppleWorkouts.length >= (directData?.appleWorkouts.length || 0) ? storeAppleWorkouts : directData?.appleWorkouts || [];
+  const weighIns = storeWeighIns.length >= (directData?.weighIns.length || 0) ? storeWeighIns : directData?.weighIns || [];
+  const healthMetrics = storeHealthMetrics.length >= (directData?.healthMetrics.length || 0) ? storeHealthMetrics : directData?.healthMetrics || [];
 
   // Fetch daily_checklist from Supabase for selected date
   useEffect(() => {

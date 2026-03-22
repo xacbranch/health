@@ -7,11 +7,7 @@ import type {
   ScheduleEvent, BodyMeasurement,
   ActivitySummary, AppleWorkout, SleepSession, Meal,
 } from "@/types";
-import {
-  getWeighIns, getGoals, getSupplements, getWorkouts,
-  getHealthMetrics, getBloodwork, getChecklist, getAllScheduleEvents,
-  getBodyMeasurements,
-} from "@/lib/data";
+import { getChecklist, getAllScheduleEvents } from "@/lib/data";
 import { fetchAll, fetchByRange } from "@/lib/supabase-data";
 
 /* ─── ID helper ─── */
@@ -122,23 +118,19 @@ export const useStore = create<Store>((set, get) => ({
   hydrated: false,
   dataSource: "seed",
 
-  /* ── Initial data (seed fallback) ── */
-  weighIns: getWeighIns(),
-  goals: getGoals(),
-  supplements: getSupplements(),
-  workouts: getWorkouts(),
-  healthMetrics: getHealthMetrics(),
-  bloodwork: getBloodwork(),
+  /* ── Initial data (empty until Supabase hydrates) ── */
+  weighIns: [],
+  goals: [],
+  supplements: [],
+  workouts: [],
+  healthMetrics: [],
+  bloodwork: [],
   checklist: getChecklist(),
   scheduleEvents: getAllScheduleEvents(),
-  bodyMeasurements: getBodyMeasurements(),
-
-  /* ── Apple Health (empty until hydrated) ── */
+  bodyMeasurements: [],
   activitySummaries: [],
   appleWorkouts: [],
   sleepSessions: [],
-
-  /* ── Meals (empty until hydrated) ── */
   meals: [],
 
   /* ── Range cache ── */
@@ -177,15 +169,15 @@ export const useStore = create<Store>((set, get) => ({
         set({
           hydrated: true,
           dataSource: "supabase",
-          healthMetrics: data.healthMetrics.length ? data.healthMetrics : get().healthMetrics,
-          weighIns: data.weighIns.length ? data.weighIns : get().weighIns,
-          goals: data.goals.length ? data.goals : get().goals,
-          supplements: data.supplements.length ? data.supplements : get().supplements,
-          workouts: data.workouts.length ? data.workouts : get().workouts,
-          bloodwork: data.bloodwork.length ? data.bloodwork : get().bloodwork,
+          healthMetrics: data.healthMetrics,
+          weighIns: data.weighIns,
+          goals: data.goals,
+          supplements: data.supplements,
+          workouts: data.workouts,
+          bloodwork: data.bloodwork,
           checklist: data.checklist.length ? data.checklist : get().checklist,
           scheduleEvents: data.scheduleEvents.length ? data.scheduleEvents : get().scheduleEvents,
-          bodyMeasurements: data.bodyMeasurements.length ? data.bodyMeasurements : get().bodyMeasurements,
+          bodyMeasurements: data.bodyMeasurements,
           activitySummaries: data.activitySummaries,
           appleWorkouts: data.appleWorkouts,
           sleepSessions: data.sleepSessions,
