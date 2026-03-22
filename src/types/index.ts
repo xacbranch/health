@@ -112,6 +112,18 @@ export interface SleepSession {
   source: string | null;
 }
 
+export interface Meal {
+  id: string;
+  date: string;
+  logged_at: string;
+  description: string;
+  calories: number;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+  notes: string | null;
+}
+
 export interface BloodworkMarker {
   name: string;
   value: number;

@@ -10,7 +10,7 @@ import type {
   WeighIn, Goal, Supplement, WorkoutSession,
   HealthMetrics, BloodworkPanel,
   ChecklistItem, ScheduleEvent, BodyMeasurement,
-  ActivitySummary, AppleWorkout, SleepSession,
+  ActivitySummary, AppleWorkout, SleepSession, Meal,
 } from "@/types";
 
 const sb = createClient();
@@ -142,6 +142,14 @@ export async function fetchSleepSessions(range?: DateRange): Promise<SleepSessio
   return data || [];
 }
 
+export async function fetchMeals(range?: DateRange): Promise<Meal[]> {
+  let query = sb.from("meals").select("*").order("date", { ascending: true });
+  query = applyRange(query, range, "date", 100);
+  const { data, error } = await query;
+  if (error) { console.error("meals:", error.message); return []; }
+  return data || [];
+}
+
 /* ─── Hydrate all (default — backward compat) ─── */
 export async function fetchAll() {
   const user = await ensureAuth();
@@ -150,18 +158,18 @@ export async function fetchAll() {
   const [
     healthMetrics, weighIns, goals, supplements,
     workouts, bloodwork, checklist, scheduleEvents,
-    bodyMeasurements, activitySummaries, appleWorkouts, sleepSessions,
+    bodyMeasurements, activitySummaries, appleWorkouts, sleepSessions, meals,
   ] = await Promise.all([
     fetchHealthMetrics(), fetchWeighIns(), fetchGoals(), fetchSupplements(),
     fetchWorkouts(), fetchBloodwork(), fetchChecklist(), fetchScheduleEvents(),
     fetchBodyMeasurements(), fetchActivitySummaries(), fetchAppleWorkouts(),
-    fetchSleepSessions(),
+    fetchSleepSessions(), fetchMeals(),
   ]);
 
   return {
     healthMetrics, weighIns, goals, supplements,
     workouts, bloodwork, checklist, scheduleEvents,
-    bodyMeasurements, activitySummaries, appleWorkouts, sleepSessions,
+    bodyMeasurements, activitySummaries, appleWorkouts, sleepSessions, meals,
   };
 }
 
@@ -173,7 +181,7 @@ export async function fetchByRange(from: string, to: string) {
   const range = { from, to };
   const [
     healthMetrics, weighIns, activitySummaries,
-    appleWorkouts, sleepSessions, bodyMeasurements,
+    appleWorkouts, sleepSessions, bodyMeasurements, meals,
   ] = await Promise.all([
     fetchHealthMetrics(range),
     fetchWeighIns(range),
@@ -181,7 +189,8 @@ export async function fetchByRange(from: string, to: string) {
     fetchAppleWorkouts(range),
     fetchSleepSessions(range),
     fetchBodyMeasurements(range),
+    fetchMeals(range),
   ]);
 
-  return { healthMetrics, weighIns, activitySummaries, appleWorkouts, sleepSessions, bodyMeasurements };
+  return { healthMetrics, weighIns, activitySummaries, appleWorkouts, sleepSessions, bodyMeasurements, meals };
 }

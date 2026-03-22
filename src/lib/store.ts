@@ -5,7 +5,7 @@ import type {
   WeighIn, Goal, Supplement, WorkoutSession, Exercise,
   HealthMetrics, BloodworkPanel, BloodworkMarker, ChecklistItem,
   ScheduleEvent, BodyMeasurement,
-  ActivitySummary, AppleWorkout, SleepSession,
+  ActivitySummary, AppleWorkout, SleepSession, Meal,
 } from "@/types";
 import {
   getWeighIns, getGoals, getSupplements, getWorkouts,
@@ -28,6 +28,7 @@ export interface RangeData {
   appleWorkouts: AppleWorkout[];
   sleepSessions: SleepSession[];
   bodyMeasurements: BodyMeasurement[];
+  meals: Meal[];
 }
 
 interface Store {
@@ -50,6 +51,9 @@ interface Store {
   activitySummaries: ActivitySummary[];
   appleWorkouts: AppleWorkout[];
   sleepSessions: SleepSession[];
+
+  /* ── Meals ── */
+  meals: Meal[];
 
   /* ── Range cache ── */
   rangeCache: Record<string, RangeData>;
@@ -134,6 +138,9 @@ export const useStore = create<Store>((set, get) => ({
   appleWorkouts: [],
   sleepSessions: [],
 
+  /* ── Meals (empty until hydrated) ── */
+  meals: [],
+
   /* ── Range cache ── */
   rangeCache: {},
   rangeFetching: false,
@@ -182,6 +189,7 @@ export const useStore = create<Store>((set, get) => ({
           activitySummaries: data.activitySummaries,
           appleWorkouts: data.appleWorkouts,
           sleepSessions: data.sleepSessions,
+          meals: data.meals,
         });
         console.log("✅ Store hydrated from Supabase");
       } else {

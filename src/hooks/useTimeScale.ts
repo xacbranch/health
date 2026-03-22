@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useStore, type RangeData } from "@/lib/store";
 import type { TimeScale } from "@/components/ui/TimeScaleSelector";
-import type { HealthMetrics, WeighIn, ActivitySummary, AppleWorkout, SleepSession, BodyMeasurement } from "@/types";
+import type { HealthMetrics, WeighIn, ActivitySummary, AppleWorkout, SleepSession, BodyMeasurement, Meal } from "@/types";
 import { subDays, subYears, format } from "date-fns";
 
 function computeRange(scale: TimeScale, customFrom?: string, customTo?: string): { from: string; to: string } {
@@ -44,6 +44,7 @@ export interface TimeScaleData {
   appleWorkouts: AppleWorkout[];
   sleepSessions: SleepSession[];
   bodyMeasurements: BodyMeasurement[];
+  meals: Meal[];
 }
 
 export function useTimeScale(defaultScale: TimeScale = "30D") {
@@ -57,6 +58,7 @@ export function useTimeScale(defaultScale: TimeScale = "30D") {
   const storeAppleWorkouts = useStore((s) => s.appleWorkouts);
   const storeSleepSessions = useStore((s) => s.sleepSessions);
   const storeBodyMeasurements = useStore((s) => s.bodyMeasurements);
+  const storeMeals = useStore((s) => s.meals);
   const rangeCache = useStore((s) => s.rangeCache);
   const rangeFetching = useStore((s) => s.rangeFetching);
   const fetchRange = useStore((s) => s.fetchRange);
@@ -86,11 +88,12 @@ export function useTimeScale(defaultScale: TimeScale = "30D") {
       appleWorkouts: filterByDate(storeAppleWorkouts, range.from, range.to, "start_date"),
       sleepSessions: filterByDate(storeSleepSessions, range.from, range.to, "start_date"),
       bodyMeasurements: filterByDate(storeBodyMeasurements, range.from, range.to),
+      meals: filterByDate(storeMeals, range.from, range.to),
     };
   }, [
     needsRemoteFetch, cacheKey, rangeCache, range,
     storeHealthMetrics, storeWeighIns, storeActivitySummaries,
-    storeAppleWorkouts, storeSleepSessions, storeBodyMeasurements,
+    storeAppleWorkouts, storeSleepSessions, storeBodyMeasurements, storeMeals,
   ]);
 
   const setCustomRange = useCallback((from: string, to: string) => {
