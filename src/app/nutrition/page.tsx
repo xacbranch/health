@@ -56,7 +56,9 @@ export default function NutritionPage() {
   const healthMetrics = data.healthMetrics;
 
   const days = useMemo(() => aggregateByDay(meals), [meals]);
-  const today = new Date().toISOString().slice(0, 10);
+  // Use local date, not UTC
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const todaySummary = days.find((d) => d.date === today);
 
   // Energy balance: calories in vs calories out
