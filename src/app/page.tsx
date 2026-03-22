@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -12,8 +12,8 @@ import {
   ReferenceLine,
 } from "recharts";
 import WeeklyCalendar from "@/components/calendar/WeeklyCalendar";
-import { getWeekSchedule } from "@/lib/data";
 import { useStore } from "@/lib/store";
+import type { CalendarDayEvent, ScheduleEvent } from "@/types";
 import { TimeScaleSelector, type TimeScale } from "@/components/ui/TimeScaleSelector";
 import { InsightButton } from "@/components/ui/InsightButton";
 import { useTimeScale } from "@/hooks/useTimeScale";
@@ -33,7 +33,46 @@ export default function Dashboard() {
   const workouts = useStore((s) => s.workouts);
   const checklist = useStore((s) => s.checklist);
   const toggleChecklistItem = useStore((s) => s.toggleChecklist);
-  const weekSchedule = getWeekSchedule();
+  const scheduleEvents = useStore((s) => s.scheduleEvents);
+
+  // Build week schedule reactively from store
+  const weekSchedule = useMemo(() => {
+    function localDateStr(d: Date) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+    const days: { date: Date; dateStr: string; events: CalendarDayEvent[] }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const dateStr = localDateStr(d);
+      const dow = d.getDay();
+
+      // Find specific-date overrides for this day
+      const specificEvents = scheduleEvents.filter((ev) => ev.specific_date === dateStr);
+      const specificTitles = new Set(specificEvents.map((ev) => ev.title));
+
+      // Find recurring template events for this day of week, excluding overridden ones
+      const templateEvents = scheduleEvents.filter((ev) => {
+        if (ev.specific_date) return false;
+        if (!ev.day_of_week?.includes(dow)) return false;
+        // If there's a specific override with the same title, skip the template
+        if (specificTitles.has(ev.title)) return false;
+        return true;
+      });
+
+      const combined = [...specificEvents, ...templateEvents]
+        .map((ev) => ({ ...ev, resolved_date: dateStr }))
+        .sort((a, b) => {
+          const at = a.start_time.replace(":", "");
+          const bt = b.start_time.replace(":", "");
+          if (at !== bt) return at.localeCompare(bt);
+          return a.sort_order - b.sort_order;
+        });
+
+      days.push({ date: d, dateStr, events: combined });
+    }
+    return days;
+  }, [scheduleEvents]);
   const [tick, setTick] = useState(0);
   const [mounted, setMounted] = useState(false);
 
