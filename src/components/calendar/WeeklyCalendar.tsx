@@ -360,7 +360,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
                   {/* Block events */}
                   {blocks.map((ev) => {
                     const status = getEventStatus(ev, dayStr);
-                    const isDragging = drag?.eventId === ev.id;
+                    const isDragging = drag?.eventId === ev.id && drag?.dayStr === dayStr;
                     const startMin = isDragging ? drag.currentStartMin : timeToMinutes(ev.start_time);
                     const endMin = isDragging ? drag.currentEndMin : (ev.end_time ? timeToMinutes(ev.end_time) : startMin + 30);
                     const wakeMin = WAKE_HOUR * 60;
@@ -376,7 +376,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
                     const trackEl = trackRefs.current[dayStr];
 
                     return (
-                      <div key={ev.id} data-event className="absolute z-10 group"
+                      <div key={`${ev.id}-${dayStr}`} data-event className="absolute z-10 group"
                         style={{
                           left: `${leftPct}%`, width: `${Math.max(widthPct, 0.5)}%`, top: 2, height: 24,
                           cursor: isDragging ? "grabbing" : "grab",
@@ -385,7 +385,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
                         onMouseDown={(e) => { if (trackEl) handleDragStart(ev, dayStr, "move", e, trackEl, minutesToTime(startMin), minutesToTime(endMin)); }}
                         onMouseEnter={(e) => handleHover(ev, e, status || undefined)}
                         onMouseLeave={() => setTooltip(null)}
-                        onClick={(e) => {
+                        onDoubleClick={(e) => {
                           e.stopPropagation();
                           if (!drag) router.push(`/schedule/${ev.id}`);
                         }}
@@ -433,11 +433,11 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
                     const color = status ? (STATUS_COLORS[status] || defaultColor) : defaultColor;
 
                     return (
-                      <div key={ev.id} data-event className="absolute z-20 cursor-pointer group"
+                      <div key={`${ev.id}-${dayStr}`} data-event className="absolute z-20 cursor-pointer group"
                         style={{ left: `calc(${leftPct}% + ${idx * 10}px)`, bottom: 4, width: 8, height: 8 }}
                         onMouseEnter={(e) => handleHover(ev, e, status || undefined)}
                         onMouseLeave={() => setTooltip(null)}
-                        onClick={(e) => { e.stopPropagation(); router.push(`/schedule/${ev.id}`); }}>
+                        onDoubleClick={(e) => { e.stopPropagation(); router.push(`/schedule/${ev.id}`); }}>
                         <div className="w-[7px] h-[7px] transition-transform group-hover:scale-[1.8]"
                           style={{ background: color, boxShadow: `0 0 5px ${color}80`, clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" }} />
                       </div>
