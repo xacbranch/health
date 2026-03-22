@@ -22,7 +22,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string | null> = {
-  done: "#39FF14", skipped: "#FFB800", missed: "#FF1A1A", pending: null,
+  done: "#39FF14", skipped: "#FFB800", missed: "#FF1A1A", pending: null, future: "#444444",
 };
 
 const EVENT_TO_KEY: Record<string, string> = {
@@ -130,21 +130,36 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
   const nowPct = ((nowMinutes - WAKE_HOUR * 60) / TOTAL_MINUTES) * 100;
   const showNowLine = nowPct >= 0 && nowPct <= 100;
 
-  function getEventStatus(ev: CalendarDayEvent, dayStr: string): string | null {
+  function getEventStatus(ev: CalendarDayEvent, dayStr: string): string {
+    const isFutureDay = dayStr > todayStr;
+    const isPastDay = dayStr < todayStr;
+    const isToday = dayStr === todayStr;
+
+    // Future days are always grey
+    if (isFutureDay) return "future";
+
+    // Check if this event has checklist tracking
     const checkKey = EVENT_TO_KEY[ev.id];
-    if (!checkKey) return null;
-    const dayChecklist = checklistByDate[dayStr] || [];
-    const row = dayChecklist.find((c) => c.key === checkKey);
-    if (!row) {
-      const isPastDay = new Date(dayStr + "T12:00:00") < new Date(todayStr + "T00:00:00");
+    if (checkKey) {
+      const dayChecklist = checklistByDate[dayStr] || [];
+      const row = dayChecklist.find((c) => c.key === checkKey);
+      if (row) return row.completed ? "done" : "skipped";
+      // No checklist entry
       if (isPastDay) return "missed";
-      if (dayStr === todayStr) {
+      if (isToday) {
         const [h, m] = ev.start_time.split(":").map(Number);
         if (h * 60 + m < nowMinutes) return "missed";
       }
-      return null;
+      return "pending";
     }
-    return row.completed ? "done" : "skipped";
+
+    // Non-tracked events: past = default color, today = pending, future = grey
+    if (isPastDay) return "done"; // assume completed if past and no tracking
+    if (isToday) {
+      const [h, m] = ev.start_time.split(":").map(Number);
+      if (h * 60 + m < nowMinutes) return "pending"; // past time today, no tracking
+    }
+    return "pending";
   }
 
   /* ─── Drag handlers ─── */
@@ -504,6 +519,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
         <LegendDot color="#39FF14" label="DONE" />
         <LegendDot color="#FFB800" label="SKIPPED" />
         <LegendDot color="#FF1A1A" label="MISSED" />
+        <LegendDot color="#444444" label="UPCOMING" />
         <span className="text-[7px] tracking-wider text-text-dim/40 ml-auto">DRAG TO MOVE -- EDGES TO RESIZE -- CLICK EMPTY TO ADD</span>
       </div>
     </div>
