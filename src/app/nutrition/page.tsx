@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, Tooltip, ReferenceLine, Cell,
@@ -12,6 +12,7 @@ import MagiModal from "@/components/ui/MagiModal";
 import { MagiInput, MagiNumber, MagiTextarea } from "@/components/ui/MagiField";
 import MagiActionBar from "@/components/ui/MagiActionBar";
 import { createClient } from "@/lib/supabase/client";
+import { ensureAuth } from "@/lib/supabase-data";
 import type { Meal } from "@/types";
 
 const AXIS_STYLE = { fill: "#333", fontSize: 8, fontFamily: "Monument Mono" };
@@ -52,8 +53,23 @@ export default function NutritionPage() {
     customRange, setCustomRange,
   } = useTimeScale("7D");
 
-  const meals = data.meals;
+  const storeMeals = data.meals;
   const healthMetrics = data.healthMetrics;
+
+  // Direct fetch as backup — store hydration can be slow
+  const [directMeals, setDirectMeals] = useState<Meal[]>([]);
+  useEffect(() => {
+    async function loadMeals() {
+      await ensureAuth();
+      const sb = createClient();
+      const { data: rows } = await sb.from("meals").select("*").order("date", { ascending: true }).limit(200);
+      if (rows?.length) setDirectMeals(rows);
+    }
+    loadMeals();
+  }, []);
+
+  // Use whichever has more data
+  const meals = storeMeals.length >= directMeals.length ? storeMeals : directMeals;
 
   const days = useMemo(() => aggregateByDay(meals), [meals]);
   // Use local date, not UTC
