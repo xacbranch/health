@@ -68,6 +68,9 @@ interface DayData { date: Date; dateStr: string; events: CalendarDayEvent[]; }
 
 interface DragState {
   eventId: string;
+  dayStr: string;        // which day row the drag started on
+  isTemplate: boolean;   // true if event uses day_of_week (recurring)
+  event: CalendarDayEvent; // full event for cloning
   type: "move" | "resize-start" | "resize-end";
   origStartMin: number;
   origEndMin: number;
@@ -145,14 +148,16 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
   }
 
   /* ─── Drag handlers ─── */
-  const handleDragStart = useCallback((eventId: string, type: DragState["type"], e: React.MouseEvent, trackEl: HTMLDivElement, startTime: string, endTime: string | null) => {
+  const handleDragStart = useCallback((ev: CalendarDayEvent, dayStr: string, type: DragState["type"], e: React.MouseEvent, trackEl: HTMLDivElement, startTime: string, endTime: string | null) => {
     e.preventDefault();
     e.stopPropagation();
     const rect = trackEl.getBoundingClientRect();
     const startMin = timeToMinutes(startTime);
     const endMin = endTime ? timeToMinutes(endTime) : startMin + 30;
     setDrag({
-      eventId, type,
+      eventId: ev.id, dayStr, event: ev,
+      isTemplate: !!(ev.day_of_week && ev.day_of_week.length > 0 && !ev.specific_date),
+      type,
       origStartMin: startMin, origEndMin: endMin,
       startX: e.clientX, trackWidth: rect.width,
       currentStartMin: startMin, currentEndMin: endMin,
@@ -193,7 +198,30 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
         if (!prev) return null;
         const newStart = minutesToTime(prev.currentStartMin);
         const newEnd = minutesToTime(prev.currentEndMin);
-        if (newStart !== minutesToTime(prev.origStartMin) || newEnd !== minutesToTime(prev.origEndMin)) {
+        const changed = newStart !== minutesToTime(prev.origStartMin) || newEnd !== minutesToTime(prev.origEndMin);
+        if (!changed) return null;
+
+        if (prev.isTemplate) {
+          // Template event (recurring) — create a day-specific override
+          // Leave the original template untouched
+          const ev = prev.event;
+          addScheduleEvent({
+            title: ev.title,
+            event_type: ev.event_type,
+            category: ev.category,
+            start_time: newStart,
+            end_time: newEnd,
+            day_of_week: null,
+            specific_date: prev.dayStr,
+            color: ev.color,
+            icon: ev.icon,
+            is_template: false,
+            completed: ev.completed,
+            notes: ev.notes ? `${ev.notes} (moved)` : "moved from template",
+            sort_order: ev.sort_order,
+          });
+        } else {
+          // Already a specific event — just update it
           updateScheduleEvent(prev.eventId, { start_time: newStart, end_time: newEnd });
         }
         return null;
@@ -206,7 +234,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [drag, updateScheduleEvent]);
+  }, [drag, updateScheduleEvent, addScheduleEvent]);
 
   /* ─── Click empty space to add ─── */
   function handleTrackClick(e: React.MouseEvent, dayStr: string, trackEl: HTMLDivElement) {
@@ -354,7 +382,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
                           cursor: isDragging ? "grabbing" : "grab",
                           opacity: isDragging ? 0.85 : 1,
                         }}
-                        onMouseDown={(e) => { if (trackEl) handleDragStart(ev.id, "move", e, trackEl, minutesToTime(startMin), minutesToTime(endMin)); }}
+                        onMouseDown={(e) => { if (trackEl) handleDragStart(ev, dayStr, "move", e, trackEl, minutesToTime(startMin), minutesToTime(endMin)); }}
                         onMouseEnter={(e) => handleHover(ev, e, status || undefined)}
                         onMouseLeave={() => setTooltip(null)}
                         onClick={(e) => {
@@ -364,7 +392,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
                       >
                         {/* Left resize handle */}
                         <div className="absolute left-0 top-0 bottom-0 w-[5px] cursor-col-resize z-20 opacity-0 group-hover:opacity-100 hover:bg-white/10"
-                          onMouseDown={(e) => { e.stopPropagation(); if (trackEl) handleDragStart(ev.id, "resize-start", e, trackEl, minutesToTime(startMin), minutesToTime(endMin)); }} />
+                          onMouseDown={(e) => { e.stopPropagation(); if (trackEl) handleDragStart(ev, dayStr, "resize-start", e, trackEl, minutesToTime(startMin), minutesToTime(endMin)); }} />
 
                         {/* Bar content */}
                         <div className="h-full rounded-sm overflow-hidden transition-all"
@@ -389,7 +417,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
 
                         {/* Right resize handle */}
                         <div className="absolute right-0 top-0 bottom-0 w-[5px] cursor-col-resize z-20 opacity-0 group-hover:opacity-100 hover:bg-white/10"
-                          onMouseDown={(e) => { e.stopPropagation(); if (trackEl) handleDragStart(ev.id, "resize-end", e, trackEl, minutesToTime(startMin), minutesToTime(endMin)); }} />
+                          onMouseDown={(e) => { e.stopPropagation(); if (trackEl) handleDragStart(ev, dayStr, "resize-end", e, trackEl, minutesToTime(startMin), minutesToTime(endMin)); }} />
                       </div>
                     );
                   })}
