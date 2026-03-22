@@ -27,9 +27,20 @@ const STATUS_ICON: Record<string, { icon: string; color: string; label: string }
   pending: { icon: "\u25A1", color: "#FF6A00", label: "PENDING" },  // empty square
 };
 
+/* ─── 24h to 12h conversion ─── */
+function to12h(time24: string): string {
+  const [hStr, mStr] = time24.split(":");
+  let h = parseInt(hStr, 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${h}:${mStr} ${ampm}`;
+}
+
 /* ─── Log entry types ─── */
 interface LogEntry {
-  time: string;
+  time: string;      // display time (12h AM/PM)
+  sortKey: string;   // HH:MM for sorting
   label: string;
   category: string;
   status: "done" | "missed" | "pending" | "auto" | "skipped";
@@ -131,7 +142,8 @@ export default function LogPage() {
       }
 
       log.push({
-        time: ev.start_time,
+        time: to12h(ev.start_time),
+        sortKey: ev.start_time,
         label: ev.title,
         category: ev.category,
         status,
@@ -143,11 +155,15 @@ export default function LogPage() {
     // 2. Apple Watch workouts
     const dayAppleWorkouts = appleWorkouts.filter((w) => w.start_date?.slice(0, 10) === selectedDate);
     for (const w of dayAppleWorkouts) {
-      const startTime = w.start_date
-        ? new Date(w.start_date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Los_Angeles" })
+      const startTime12 = w.start_date
+        ? new Date(w.start_date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Los_Angeles" })
         : "??:??";
+      const startTime24 = w.start_date
+        ? new Date(w.start_date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Los_Angeles" })
+        : "99:99";
       log.push({
-        time: startTime,
+        time: startTime12,
+        sortKey: startTime24,
         label: w.activity_type,
         category: "training",
         status: "auto",
@@ -159,11 +175,15 @@ export default function LogPage() {
     // 3. Meals
     const dayMeals = meals.filter((m) => m.date === selectedDate);
     for (const m of dayMeals) {
-      const time = m.logged_at
+      const time12 = m.logged_at
+        ? new Date(m.logged_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Los_Angeles" })
+        : "12:00 PM";
+      const time24 = m.logged_at
         ? new Date(m.logged_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Los_Angeles" })
         : "12:00";
       log.push({
-        time,
+        time: time12,
+        sortKey: time24,
         label: m.description,
         category: "meal",
         status: "done",
@@ -176,7 +196,8 @@ export default function LogPage() {
     const dayWeighIn = weighIns.find((w) => w.date === selectedDate);
     if (dayWeighIn) {
       log.push({
-        time: "08:15",
+        time: to12h("08:15"),
+        sortKey: "08:15",
         label: "WEIGH-IN",
         category: "health_check",
         status: "done",
@@ -188,7 +209,8 @@ export default function LogPage() {
     const dayHM = healthMetrics.find((h) => h.date === selectedDate);
     if (dayHM && dayHM.steps) {
       log.push({
-        time: "23:59",
+        time: to12h("23:59"),
+        sortKey: "23:59",
         label: "DAILY ACTIVITY",
         category: "routine",
         status: "auto",
@@ -197,7 +219,7 @@ export default function LogPage() {
       });
     }
 
-    return log.sort((a, b) => a.time.localeCompare(b.time));
+    return log.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   }, [selectedDate, dayOfWeek, schedule, checklistData, appleWorkouts, meals, weighIns, healthMetrics]);
 
   // Stats
