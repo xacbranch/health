@@ -34,6 +34,7 @@ interface LogEntry {
   status: "done" | "missed" | "pending" | "auto" | "skipped";
   detail?: string;
   source?: string;
+  checklistKey?: string; // if set, entry is toggleable via daily_checklist
 }
 
 /* ─── Supabase checklist row ─── */
@@ -132,6 +133,7 @@ export default function LogPage() {
         category: ev.category,
         status,
         detail: checkRow?.notes || ev.notes || undefined,
+        checklistKey: checkKey || undefined,
       });
     }
 
@@ -200,6 +202,47 @@ export default function LogPage() {
   const missed = entries.filter((e) => e.status === "missed").length;
   const skipped = entries.filter((e) => e.status === "skipped").length;
   const pending = entries.filter((e) => e.status === "pending").length;
+
+  // Toggle checklist item status: pending/missed -> done -> skipped -> pending/missed
+  async function toggleStatus(entry: LogEntry) {
+    if (!entry.checklistKey) return;
+    const sb = createClient();
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+
+    const nextStatus: Record<string, { completed: boolean } | null> = {
+      pending: { completed: true },     // pending -> done
+      missed: { completed: true },      // missed -> done
+      done: { completed: false },       // done -> skipped
+      skipped: null,                    // skipped -> remove (back to missed/pending)
+    };
+
+    const next = nextStatus[entry.status];
+    if (next === null) {
+      // Delete the row to go back to missed/pending
+      await sb.from("daily_checklist")
+        .delete()
+        .eq("user_id", session.user.id)
+        .eq("date", selectedDate)
+        .eq("key", entry.checklistKey);
+    } else if (next) {
+      await sb.from("daily_checklist").upsert({
+        user_id: session.user.id,
+        date: selectedDate,
+        key: entry.checklistKey,
+        label: entry.label,
+        completed: next.completed,
+        completed_at: next.completed ? new Date().toISOString() : null,
+      }, { onConflict: "user_id,date,key" });
+    }
+
+    // Refresh checklist data
+    const { data } = await sb
+      .from("daily_checklist")
+      .select("key, label, completed, completed_at, notes")
+      .eq("date", selectedDate);
+    setChecklistData(data || []);
+  }
 
   // Date navigation
   const goDay = (offset: number) => {
@@ -281,8 +324,9 @@ export default function LogPage() {
               return (
                 <div
                   key={i}
-                  className="flex items-start gap-3 px-3 py-2 border-l-2 transition-colors"
+                  className={`flex items-start gap-3 px-3 py-2 border-l-2 transition-colors ${entry.checklistKey ? "cursor-pointer hover:brightness-125" : ""}`}
                   style={{ borderColor: `${si.color}60`, background: `${si.color}06` }}
+                  onClick={() => entry.checklistKey && toggleStatus(entry)}
                 >
                   {/* Time */}
                   <div className="text-[9px] font-bold tabular-nums text-text-dim w-10 shrink-0 pt-0.5">
@@ -314,8 +358,13 @@ export default function LogPage() {
                   </div>
 
                   {/* Status label */}
-                  <div className="text-[7px] font-bold tracking-wider shrink-0" style={{ color: si.color }}>
-                    {si.label}
+                  <div className="flex flex-col items-end shrink-0">
+                    <div className="text-[7px] font-bold tracking-wider" style={{ color: si.color }}>
+                      {si.label}
+                    </div>
+                    {entry.checklistKey && (
+                      <div className="text-[6px] text-text-dim/40 tracking-wider">CLICK</div>
+                    )}
                   </div>
                 </div>
               );
