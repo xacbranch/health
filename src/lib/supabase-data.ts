@@ -136,7 +136,7 @@ export async function fetchAppleWorkouts(range?: DateRange): Promise<AppleWorkou
 
 export async function fetchSleepSessions(range?: DateRange): Promise<SleepSession[]> {
   let query = sb.from("sleep_sessions").select("*").order("start_date", { ascending: true });
-  query = applyRange(query, range, "start_date", 200);
+  query = applyRange(query, range, "start_date", 2000);
   const { data, error } = await query;
   if (error) { console.error("sleep_sessions:", error.message); return []; }
   return data || [];
