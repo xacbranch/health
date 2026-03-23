@@ -17,6 +17,12 @@ All data lives in Supabase PostgreSQL. Use psql for ALL reads and writes:
 
 User ID (use in every INSERT): `efd6fb17-951e-4d8c-a768-ec826ca3ae50`
 
+**CRITICAL: NEVER use CURRENT_DATE or now()::date for the date column.** The server is UTC. Xach is in Pacific time. ALWAYS use:
+```sql
+(now() AT TIME ZONE 'America/Los_Angeles')::date
+```
+This is non-negotiable. Using CURRENT_DATE after 5 PM PT will log to the wrong day.
+
 ## Logging Actions
 
 ### Checklist items (supplements, walks, tasks)
