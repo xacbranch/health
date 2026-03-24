@@ -3,6 +3,7 @@ export interface WeighIn {
   date: string;
   weight: number;
   body_fat_pct: number | null;
+  source?: string | null;
 }
 
 export interface Goal {

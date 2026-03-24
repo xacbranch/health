@@ -98,7 +98,9 @@ export async function fetchBloodwork(): Promise<BloodworkPanel[]> {
 }
 
 export async function fetchChecklist(): Promise<ChecklistItem[]> {
-  const today = new Date().toISOString().slice(0, 10);
+  // Use Pacific time date, not UTC
+  const now = new Date();
+  const today = now.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
   const { data, error } = await sb.from("daily_checklist").select("*").eq("date", today);
   if (error) { console.error("daily_checklist:", error.message); return []; }
   return data || [];

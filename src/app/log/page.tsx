@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
-import { getAllScheduleEvents } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
 import { ensureAuth } from "@/lib/supabase-data";
 import { format } from "date-fns";
@@ -136,8 +135,9 @@ export default function LogPage() {
     fetchChecklist();
   }, [selectedDate]);
 
-  // Get schedule from seed data (schedule_events table is empty)
-  const schedule = useMemo(() => getAllScheduleEvents(), []);
+  // Get schedule from store (Supabase)
+  const storeSchedule = useStore((s) => s.scheduleEvents);
+  const schedule = storeSchedule;
   const dayOfWeek = new Date(selectedDate + "T12:00:00").getDay();
 
   // Build day's log

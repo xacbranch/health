@@ -7,12 +7,15 @@ import MagiModal from "@/components/ui/MagiModal";
 import MagiConfirm from "@/components/ui/MagiConfirm";
 import { MagiInput, MagiNumber, MagiSelect } from "@/components/ui/MagiField";
 
-const START_VALUES: Record<string, number> = {
-  "Body Weight": 210,
-  "Body Fat": 25,
-  Waist: 37,
-  LDL: 160,
-};
+// For "down" direction goals, we need a starting point to calculate progress.
+// Use a generous multiplier of the target if no historical baseline exists.
+function estimateStart(goal: Goal): number {
+  // If current > target for down goals, use current as a reasonable start
+  if (goal.direction === "down" && goal.current > goal.target) {
+    return goal.current * 1.15; // assume 15% above current as baseline
+  }
+  return goal.current;
+}
 
 const CATEGORY_STYLES: Record<Goal["category"], string> = {
   weight: "bg-lime/10 text-lime border-lime/30",
@@ -25,9 +28,9 @@ const CATEGORY_STYLES: Record<Goal["category"], string> = {
 
 function getProgress(goal: Goal): number {
   if (goal.direction === "down") {
-    const start = START_VALUES[goal.name] ?? goal.current;
+    const start = estimateStart(goal);
     const range = start - goal.target;
-    if (range <= 0) return 0;
+    if (range <= 0) return 100; // already at or past target
     return Math.min(100, Math.max(0, ((start - goal.current) / range) * 100));
   }
   if (goal.target === 0) return 0;

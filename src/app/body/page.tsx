@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useStore } from "@/lib/store";
+import { useConfig } from "@/lib/config";
 import type { WeighIn, BodyMeasurement, MeasurementSite } from "@/types";
 import MagiModal from "@/components/ui/MagiModal";
 import MagiConfirm from "@/components/ui/MagiConfirm";
@@ -76,7 +77,7 @@ export default function BodyPage() {
       ? Math.round((last30[last30.length - 1].weight - last30[0].weight) * 10) / 10
       : 0;
 
-  const goalWeight = 185;
+  const { weightGoal: goalWeight } = useConfig();
 
   const chartData = last30.map((w) => ({
     date: w.date.slice(5),
@@ -338,7 +339,7 @@ export default function BodyPage() {
                 strokeDasharray="6 4"
                 strokeWidth={1.5}
                 label={{
-                  value: "GOAL 185",
+                  value: `GOAL ${goalWeight}`,
                   position: "right",
                   fill: "#00D0FF",
                   fontSize: 10,

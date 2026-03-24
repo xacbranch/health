@@ -13,13 +13,12 @@ import { MagiInput, MagiNumber, MagiTextarea } from "@/components/ui/MagiField";
 import MagiActionBar from "@/components/ui/MagiActionBar";
 import { createClient } from "@/lib/supabase/client";
 import { ensureAuth } from "@/lib/supabase-data";
+import { useStore } from "@/lib/store";
+import { useConfig } from "@/lib/config";
 import type { Meal } from "@/types";
 
 const AXIS_STYLE = { fill: "#333", fontSize: 8, fontFamily: "Monument Mono" };
 
-/* ─── Calorie targets ─── */
-const CAL_TARGET = 2200;
-const PROTEIN_TARGET = 180; // g
 const MACRO_COLORS = { protein: "#39FF14", carbs: "#FF6A00", fat: "#00D0FF" };
 
 /* ─── Aggregate meals by day ─── */
@@ -48,6 +47,8 @@ function aggregateByDay(meals: Meal[]): DaySummary[] {
 }
 
 export default function NutritionPage() {
+  const addMeal = useStore((s) => s.addMeal);
+  const { calorieTarget: CAL_TARGET, proteinTarget: PROTEIN_TARGET } = useConfig();
   const {
     scale, setScale, data, loading, scaleLabel,
     customRange, setCustomRange,
@@ -135,18 +136,22 @@ export default function NutritionPage() {
       const sb = createClient();
       const { data: { session } } = await sb.auth.getSession();
       if (!session) { setSaving(false); return; }
-      await sb.from("meals").insert({
-        user_id: session.user.id,
+      const meal = {
         date: today,
+        logged_at: new Date().toISOString(),
         description: form.description,
         calories: form.calories,
         protein_g: form.protein || null,
         carbs_g: form.carbs || null,
         fat_g: form.fat || null,
         notes: form.notes || null,
-      });
-      // Refresh store
-      window.location.reload();
+      };
+      await sb.from("meals").insert({ user_id: session.user.id, ...meal });
+      // Update store directly — no reload needed
+      addMeal(meal);
+      setShowAdd(false);
+      setForm({ description: "", calories: 0, protein: 0, carbs: 0, fat: 0, notes: "" });
+      setSaving(false);
     } catch (err) {
       console.error("Failed to log meal:", err);
       setSaving(false);

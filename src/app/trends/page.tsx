@@ -7,6 +7,7 @@ import { TimeScaleSelector, type TimeScale } from "@/components/ui/TimeScaleSele
 import { InsightButton } from "@/components/ui/InsightButton";
 import { useTimeScale } from "@/hooks/useTimeScale";
 import { autoDownsample } from "@/lib/downsample";
+import { useConfig } from "@/lib/config";
 import type { HealthMetrics } from "@/types";
 
 /* ─── Chart config ─── */
@@ -31,7 +32,7 @@ const METRICS: MetricChart[] = [
     field: "steps", // placeholder — uses weighIns
     color: "#39FF14",
     unit: "LBS",
-    refLine: { y: 185, label: "GOAL 185" },
+    refLine: { y: 0, label: "" }, // overridden at render time from config
     domainPad: 5,
     useWeighIns: true,
   },
@@ -93,10 +94,18 @@ const AXIS_STYLE = {
 };
 
 export default function TrendsPage() {
+  const cfg = useConfig();
   const {
     scale, setScale, data, loading, scaleLabel,
     customRange, setCustomRange,
   } = useTimeScale("1Y");
+
+  // Override weight goal refLine from config
+  const metrics = METRICS.map((m) =>
+    m.key === "weight"
+      ? { ...m, refLine: { y: cfg.weightGoal, label: `GOAL ${cfg.weightGoal}` } }
+      : m,
+  );
 
   return (
     <div className="p-3 md:p-4 pb-20 md:pb-4 space-y-3">
@@ -127,7 +136,7 @@ export default function TrendsPage() {
       </div>
 
       {/* Metric charts */}
-      {METRICS.map((m) => {
+      {metrics.map((m) => {
         const isWeight = m.useWeighIns;
         const rawData = isWeight
           ? data.weighIns.map((w) => ({ date: w.date, value: w.weight }))

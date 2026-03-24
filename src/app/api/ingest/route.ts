@@ -111,7 +111,7 @@ async function processHAE(body: { data: { metrics?: HAEMetric[]; workouts?: HAEW
   const dailyMap = new Map<string, Record<string, number | null>>();
   const hrSamples: { timestamp: string; bpm: number; source: string }[] = [];
   const sleepRows: { start_date: string; end_date: string; stage: string; source: string }[] = [];
-  const weighIns: { date: string; weight: number; body_fat_pct: number | null }[] = [];
+  const weighIns: { date: string; weight: number; body_fat_pct: number | null; source: string }[] = [];
 
   for (const metric of body.data.metrics || []) {
     const key = metric.name?.toLowerCase().replace(/\s+/g, "_");
@@ -167,7 +167,7 @@ async function processHAE(body: { data: { metrics?: HAEMetric[]; workouts?: HAEW
 
       // Weight → weigh_ins table
       if (col === "weight") {
-        weighIns.push({ date, weight: +val, body_fat_pct: null });
+        weighIns.push({ date, weight: +val, body_fat_pct: null, source: "health_auto_export" });
         continue;
       }
       if (col === "body_fat") {
@@ -237,7 +237,7 @@ async function processHAE(body: { data: { metrics?: HAEMetric[]; workouts?: HAEW
   // Insert weigh-ins
   if (weighIns.length) {
     const rows = weighIns.map((w) => ({ user_id: USER_ID, ...w }));
-    const { error } = await sb.from("weigh_ins").insert(rows);
+    const { error } = await sb.from("weigh_ins").upsert(rows, { onConflict: "user_id,date", ignoreDuplicates: true });
     results.weight = error ? { error: error.message } : { count: rows.length };
   }
 

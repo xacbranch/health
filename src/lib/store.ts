@@ -7,15 +7,16 @@ import type {
   ScheduleEvent, BodyMeasurement,
   ActivitySummary, AppleWorkout, SleepSession, Meal,
 } from "@/types";
-import { getChecklist, getAllScheduleEvents } from "@/lib/data";
+import { getChecklist } from "@/lib/data";
 import { fetchAll, fetchByRange } from "@/lib/supabase-data";
 import { createClient } from "@/lib/supabase/client";
 
 /* ─── Supabase helper (fire-and-forget writes) ─── */
 const sb = createClient();
+const USER_ID = "efd6fb17-951e-4d8c-a768-ec826ca3ae50";
 
 function dbInsert(table: string, row: Record<string, unknown>) {
-  sb.from(table).insert(row).then(({ error }) => {
+  sb.from(table).insert({ user_id: USER_ID, ...row }).then(({ error }) => {
     if (error) console.error(`db insert ${table}:`, error.message);
   });
 }
@@ -151,7 +152,7 @@ export const useStore = create<Store>((set, get) => ({
   healthMetrics: [],
   bloodwork: [],
   checklist: getChecklist(),
-  scheduleEvents: getAllScheduleEvents(),
+  scheduleEvents: [],
   bodyMeasurements: [],
   activitySummaries: [],
   appleWorkouts: [],
@@ -201,7 +202,7 @@ export const useStore = create<Store>((set, get) => ({
           workouts: data.workouts,
           bloodwork: data.bloodwork,
           checklist: data.checklist.length ? data.checklist : get().checklist,
-          scheduleEvents: data.scheduleEvents.length ? data.scheduleEvents : get().scheduleEvents,
+          scheduleEvents: data.scheduleEvents,
           bodyMeasurements: data.bodyMeasurements,
           activitySummaries: data.activitySummaries,
           appleWorkouts: data.appleWorkouts,
