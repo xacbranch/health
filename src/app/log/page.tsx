@@ -57,21 +57,29 @@ interface ChecklistRow {
   notes: string | null;
 }
 
-/* ─── Schedule event to checklist key mapping ─── */
-const EVENT_TO_KEY: Record<string, string> = {
-  "se-iron": "iron",
-  "se-hydrate": "hydrate_am",
-  "se-semax": "semax",
-  "se-dogwalk-am": "dogwalk_am",
-  "se-weighin": "weighin",
-  "se-d3k2": "d3k2",
-  "se-hydrate-pm": "hydrate_pm",
-  "se-preworkout": "preworkout",
-  "se-gym": "gym",
-  "se-tennis": "tennis",
-  "se-dogwalk-pm": "dogwalk_pm",
-  "se-magnesium": "magnesium",
+/* ─── Schedule event title to checklist key mapping ─── */
+const TITLE_TO_KEY: Record<string, string> = {
+  "IRON + VIT C": "iron",
+  "HYDRATE 16OZ": "hydrate_am",
+  "SEMAX + SELANK": "semax",
+  "DOG WALK": "dogwalk_am", // AM walk; PM resolved by start_time
+  "WEIGH-IN": "weighin",
+  "D3+K2": "d3k2",
+  "HYDRATION CHECK": "hydrate_pm",
+  "PRE-WORKOUT": "preworkout",
+  "GYM": "gym",
+  "TENNIS": "tennis",
+  "MAGNESIUM GLYCINATE": "magnesium",
 };
+
+function getChecklistKey(ev: { title: string; start_time: string }): string | null {
+  // DOG WALK appears twice — disambiguate by time
+  if (ev.title === "DOG WALK") {
+    const [h] = ev.start_time.split(":").map(Number);
+    return h < 12 ? "dogwalk_am" : "dogwalk_pm";
+  }
+  return TITLE_TO_KEY[ev.title] || null;
+}
 
 /* ─── Local date helper ─── */
 function localDate(d: Date = new Date()): string {
@@ -160,12 +168,13 @@ export default function LogPage() {
       // Skip sleep/work/winddown from log
       if (["sleep", "work"].includes(ev.category) || ev.title === "WIND DOWN") continue;
 
-      const [h, m] = ev.start_time.split(":").map(Number);
+      const startTime = ev.start_time.slice(0, 5); // normalize "07:00:00" to "07:00"
+      const [h, m] = startTime.split(":").map(Number);
       const evMinute = h * 60 + m;
       const isPast = evMinute < currentMinute;
 
       // Check Supabase daily_checklist for this event
-      const checkKey = EVENT_TO_KEY[ev.id];
+      const checkKey = getChecklistKey(ev);
       const checkRow = checkKey ? checklistData.find((c) => c.key === checkKey) : null;
 
       let status: LogEntry["status"] = "pending";
@@ -179,8 +188,8 @@ export default function LogPage() {
       }
 
       log.push({
-        time: to12h(ev.start_time),
-        sortKey: ev.start_time,
+        time: to12h(startTime),
+        sortKey: startTime,
         label: ev.title,
         category: ev.category,
         status,

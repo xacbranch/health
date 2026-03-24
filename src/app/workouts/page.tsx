@@ -45,11 +45,12 @@ export default function WorkoutsPage() {
     d.setDate(monday.getDate() + i);
     const dateStr = d.toISOString().split("T")[0];
     const workout = workouts.find((w) => w.date === dateStr);
+    const dayAppleWorkouts = appleWorkouts.filter((w) => w.start_date?.slice(0, 10) === dateStr);
     const labels = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-    return { label: labels[i], date: dateStr, workout, isToday: dateStr === today };
+    return { label: labels[i], date: dateStr, workout, dayAppleWorkouts, isToday: dateStr === today };
   });
 
-  const sessionsThisWeek = weekDays.filter((d) => d.workout).length;
+  const sessionsThisWeek = weekDays.filter((d) => d.workout || d.dayAppleWorkouts.length > 0).length;
   const totalVolume = workouts
     .filter((w) => weekDays.some((d) => d.date === w.date))
     .reduce((sum, w) => sum + w.exercises.reduce((s, e) => s + e.sets * e.reps * (e.weight || 0), 0), 0);

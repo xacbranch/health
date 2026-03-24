@@ -25,19 +25,26 @@ const STATUS_COLORS: Record<string, string> = {
   done: "#39FF14", skipped: "#FFB800", missed: "#FF1A1A", pending: "#888888", future: "#444444",
 };
 
-const EVENT_TO_KEY: Record<string, string> = {
-  "se-iron": "iron", "se-hydrate": "hydrate_am", "se-semax": "semax",
-  "se-dogwalk-am": "dogwalk_am", "se-weighin": "weighin", "se-d3k2": "d3k2",
-  "se-hydrate-pm": "hydrate_pm", "se-preworkout": "preworkout",
-  "se-gym": "gym", "se-tennis": "tennis", "se-dogwalk-pm": "dogwalk_pm",
-  "se-magnesium": "magnesium",
+const TITLE_TO_KEY: Record<string, string> = {
+  "IRON + VIT C": "iron", "HYDRATE 16OZ": "hydrate_am", "SEMAX + SELANK": "semax",
+  "DOG WALK": "dogwalk_am", "WEIGH-IN": "weighin", "D3+K2": "d3k2",
+  "HYDRATION CHECK": "hydrate_pm", "PRE-WORKOUT": "preworkout",
+  "GYM": "gym", "TENNIS": "tennis", "MAGNESIUM GLYCINATE": "magnesium",
 };
+
+function getChecklistKey(title: string, startTime: string): string | null {
+  if (title === "DOG WALK") {
+    const [h] = startTime.split(":").map(Number);
+    return h < 12 ? "dogwalk_am" : "dogwalk_pm";
+  }
+  return TITLE_TO_KEY[title] || null;
+}
 
 const CATEGORIES: EventCategory[] = ["work", "training", "supplement", "meal", "routine", "health_check"];
 
 /* ─── Helpers ─── */
 function timeToMinutes(time: string): number {
-  const [h, m] = time.split(":").map(Number);
+  const [h, m] = time.slice(0, 5).split(":").map(Number);
   return h * 60 + m;
 }
 
@@ -53,7 +60,7 @@ function snapMinutes(m: number): number {
 }
 
 function formatTime(time: string): string {
-  const [h, m] = time.split(":").map(Number);
+  const [h, m] = time.slice(0, 5).split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
   return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
@@ -140,7 +147,7 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
     if (isFutureDay) return "future";
 
     // Check if this event has checklist tracking
-    const checkKey = EVENT_TO_KEY[ev.id];
+    const checkKey = getChecklistKey(ev.title, ev.start_time);
     if (checkKey) {
       const dayChecklist = checklistByDate[dayStr] || [];
       const row = dayChecklist.find((c) => c.key === checkKey);
@@ -148,8 +155,8 @@ export default function WeeklyCalendar({ days }: { days: DayData[] }) {
       // No checklist entry
       if (isPastDay) return "missed";
       if (isToday) {
-        const [h, m] = ev.start_time.split(":").map(Number);
-        if (h * 60 + m < nowMinutes) return "missed";
+        const evMin = timeToMinutes(ev.start_time);
+        if (evMin < nowMinutes) return "missed";
       }
       return "pending";
     }
